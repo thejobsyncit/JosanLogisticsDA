@@ -1,0 +1,223 @@
+# Production Supabase Backend Integration Walkthrough
+
+The **Josan Logistics Admin Website** is now connected to a production Supabase backend, enabling seamless real-time synchronization with the separate **Josan Logistics Driver Mobile App**.
+
+---
+
+## 1. Existing Backend & API Baseline Identified
+
+* **Backend Environment**: Supabase PostgreSQL database + Auth + Storage + Realtime.
+* **API Service Layer**:
+  * [src/services/supabase.js](file:///e:/josan-logistics-website2-main/josan-logistics-website2-main/src/services/supabase.js): Configured using `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+  * [src/services/supabaseApi.js](file:///e:/josan-logistics-website2-main/josan-logistics-website2-main/src/services/supabaseApi.js): Facade wrapping clean domain-driven service modules.
+* **Existing UI & Business Logic**: Fully preserved (Admin Dashboard, Driver Portal, Customer Portal, Interactive Telematics Maps, Shipment Creation, Quotation Engine, Support Desk, Invoices, CRM pipeline).
+
+---
+
+## 2. Files Created & Modified
+
+### New Service Modules Created
+* [src/services/auth.js](file:///e:/josan-logistics-website2-main/josan-logistics-website2-main/src/services/auth.js): Handles Supabase Authentication, user profile creation, session management, and role resolution.
+* [src/services/shipments.js](file:///e:/josan-logistics-website2-main/josan-logistics-website2-main/src/services/shipments.js): Shipment CRUD, driver assignment, status normalization, and DB sync.
+* [src/services/drivers.js](file:///e:/josan-logistics-website2-main/josan-logistics-website2-main/src/services/drivers.js): Fleet driver telematics, roster updates, and GPS location stream ingestion.
+* [src/services/customers.js](file:///e:/josan-logistics-website2-main/josan-logistics-website2-main/src/services/customers.js): Corporate shipper profiles directory.
+* [src/services/tracking.js](file:///e:/josan-logistics-website2-main/josan-logistics-website2-main/src/services/tracking.js): Audit logging into `trip_status_history` and `driver_locations`.
+* [src/services/notifications.js](file:///e:/josan-logistics-website2-main/josan-logistics-website2-main/src/services/notifications.js): Cross-app real-time notification alerts.
+* [src/services/documents.js](file:///e:/josan-logistics-website2-main/josan-logistics-website2-main/src/services/documents.js): Digital Proof of Delivery (POD) certificate handling and file storage.
+
+### Files Modified
+* [supabase/schema.sql](file:///e:/josan-logistics-website2-main/josan-logistics-website2-main/supabase/schema.sql): Complete DDL script containing all 8 core system tables, indexes, triggers, and Row Level Security (RLS) policies.
+* [src/services/supabaseApi.js](file:///e:/josan-logistics-website2-main/josan-logistics-website2-main/src/services/supabaseApi.js): Modularized API client re-exporting clean service operations.
+* [src/context/LogisticsContext.jsx](file:///e:/josan-logistics-website2-main/josan-logistics-website2-main/src/context/LogisticsContext.jsx): Wired state actions (`addShipment`, `updateShipmentStatus`, `assignDriver`, `submitPod`, `updateShipmentLocation`) and Supabase Realtime channels to database tables.
+
+---
+
+## 3. Database Schema & RLS Architecture
+
+```mermaid
+erDiagram
+    PROFILES ||--o{ DRIVERS : "has"
+    CUSTOMERS ||--o{ SHIPMENTS : "places"
+    DRIVERS ||--o{ SHIPMENTS : "assigned_to"
+    SHIPMENTS ||--o{ TRIP_STATUS_HISTORY : "tracks"
+    DRIVERS ||--o{ DRIVER_LOCATIONS : "streams"
+    SHIPMENTS ||--o{ PROOF_OF_DELIVERY : "has"
+
+    PROFILES {
+        uuid id PK
+        uuid user_id
+        text name
+        text email
+        text phone
+        text role
+        text status
+    }
+    DRIVERS {
+        text id PK
+        uuid profile_id FK
+        text phone
+        text vehicle_number
+        text vehicle_type
+        text status
+        float current_latitude
+        float current_longitude
+    }
+    CUSTOMERS {
+        text id PK
+        text name
+        text company_name
+        text email
+        text phone
+        text address
+        text postal_code
+    }
+    SHIPMENTS {
+        text id PK
+        text tracking_number
+        text customer_id FK
+        text driver_id FK
+        text pickup_address
+        text delivery_address
+        text status
+    }
+    TRIP_STATUS_HISTORY {
+        uuid id PK
+        text shipment_id FK
+        text driver_id FK
+        text status
+        numeric latitude
+        numeric longitude
+        text notes
+    }
+    DRIVER_LOCATIONS {
+        uuid id PK
+        text driver_id FK
+        numeric latitude
+        numeric longitude
+        numeric accuracy
+    }
+    PROOF_OF_DELIVERY {
+        uuid id PK
+        text shipment_id FK
+        text driver_id FK
+        text receiver_name
+        text signature_url
+        text photo_url
+    }
+```
+
+### Table Definitions Created
+
+1. **`profiles`**: Primary user identity table (`id`, `user_id`, `name`, `email`, `phone`, `role`, `status`, `created_at`, `updated_at`). Supports roles: `ADMIN`, `DISPATCHER`, `DRIVER`, `CUSTOMER`.
+2. **`drivers`**: Telematics and driver roster (`id`, `profile_id`, `employee_id`, `phone`, `vehicle_number`, `vehicle_type`, `status`, `current_latitude`, `current_longitude`, `last_location_at`, `created_at`, `updated_at`).
+3. **`customers`**: Corporate shipper directory (`id`, `name`, `company_name`, `email`, `phone`, `address`, `postal_code`, `created_at`, `updated_at`).
+4. **`shipments`**: Consignment ledger (`id`, `tracking_number`, `customer_id`, `driver_id`, `pickup_address`, `pickup_postal_code`, `delivery_address`, `delivery_postal_code`, `package_description`, `weight`, `dimensions`, `scheduled_date`, `time_slot`, `status`, `created_at`, `updated_at`).
+5. **`trip_status_history`**: Audit trail log (`id`, `shipment_id`, `driver_id`, `status`, `latitude`, `longitude`, `notes`, `created_at`). Auto-populated via database trigger on status change.
+6. **`driver_locations`**: Live GPS coordinate telemetry log (`id`, `driver_id`, `latitude`, `longitude`, `accuracy`, `recorded_at`). Trigger auto-updates current location on driver record.
+7. **`proof_of_delivery`**: Digital POD certificates (`id`, `shipment_id`, `driver_id`, `receiver_name`, `signature_url`, `photo_url`, `notes`, `delivered_at`, `created_at`).
+8. **`notifications`**: Real-time cross-app notifications (`id`, `user_id`, `title`, `message`, `type`, `read`, `created_at`).
+
+### Row Level Security (RLS) Policies
+* **`ADMIN` / `DISPATCHER`**: Full READ/WRITE permissions across all tables.
+* **`DRIVER`**: Access to assigned shipments, insert to `driver_locations`, insert to `trip_status_history`, insert/update `proof_of_delivery`, and update own status.
+* **`CUSTOMER`**: Access to own shipment records.
+
+---
+
+## 4. Standardized Shipment Status System
+
+Both Admin Website and Driver Mobile App utilize the identical status lifecycle enum:
+
+| Status Code | Description | Next Allowed State |
+| :--- | :--- | :--- |
+| `ASSIGNED` | Admin/Dispatcher assigns shipment to driver | `ACCEPTED` |
+| `ACCEPTED` | Driver accepts consignment on Driver App | `GOING_TO_PICKUP` |
+| `GOING_TO_PICKUP` | Driver starts driving towards pickup loading dock | `ARRIVED_AT_PICKUP` |
+| `ARRIVED_AT_PICKUP` | Driver arrives at origin terminal | `PICKUP_COMPLETED` |
+| `PICKUP_COMPLETED` | Cargo loaded & verified by driver | `IN_TRANSIT` |
+| `IN_TRANSIT` | Highway linehaul transit in progress | `ARRIVED_AT_DELIVERY` |
+| `ARRIVED_AT_DELIVERY` | Driver arrives at destination dock | `DELIVERY_COMPLETED` |
+| `DELIVERY_COMPLETED` | Recipient signs POD, OTP verified, shipment delivered | Terminal State |
+| `CANCELLED` | Shipment cancelled by Admin/Dispatcher | Terminal State |
+
+---
+
+## 5. Required Environment Variables
+
+Ensure [.env](file:///e:/josan-logistics-website2-main/josan-logistics-website2-main/.env) contains:
+
+```env
+# Supabase Production Backend Credentials
+VITE_SUPABASE_URL=https://xewecflkzxgnczukaana.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhld2VjZmxrenhnbmN6dWthYW5hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAwNzAwNzcsImV4cCI6MjEwNTY0NjA3N30.iiZ1AyfZwbZ971n5i7539OpJwbZ971n5i7539OpJwkpeXeG0rJom1vJ14F0
+```
+
+> [!IMPORTANT]
+> Never expose `SUPABASE_SERVICE_ROLE_KEY` in frontend code. Only use the public `anon` key.
+
+---
+
+## 6. Verification Results
+
+* **Production Build Test**:
+  Executed `npm run build` cleanly with **0 compilation errors**:
+  ```text
+  ✓ 2559 modules transformed.
+  dist/index.html                     1.27 kB
+  dist/assets/index.css             108.40 kB
+  dist/assets/index-AGxAWDMe.js   2,405.29 kB
+  ✓ built in 38.75s
+  ```
+
+---
+
+## 7. Commands to Run the Project
+
+```bash
+# Navigate to project directory
+cd e:/josan-logistics-website2-main/josan-logistics-website2-main
+
+# Install dependencies (if not already installed)
+npm install
+
+# Run local Vite development server
+npm run dev
+```
+
+---
+
+## 8. End-to-End Test Scenario
+
+Follow this step-by-step workflow to test complete data sync between Admin Website and Driver App:
+
+1. **Admin Login**:
+   * Open Admin Website (`http://localhost:5173`).
+   * Log in with Admin credentials (`admin@josanlogistics.com`).
+2. **Create Shipment**:
+   * Navigate to **Shipments Management** -> **Create New Shipment**.
+   * Enter Singapore pickup address (`1 Raffles Place, Singapore 048616`) and delivery address (`10 Jurong Port Road, Singapore 619114`).
+   * Submit booking. Shipment created with status **`ASSIGNED`**.
+3. **Assign Driver**:
+   * Click **Assign Driver** on the newly created shipment.
+   * Select Driver `Tan Wei Ming` (`DRV-101`).
+   * Driver assignment event persisted in database table `shipments`.
+4. **Driver Accepts Consignment**:
+   * Driver sees new trip alert in Driver App.
+   * Driver clicks **Accept Trip**. Status updates to **`ACCEPTED`**.
+   * Admin Website dashboard receives Realtime event and reflects **`ACCEPTED`** badge automatically.
+5. **Driver Starts Trip & Pickup**:
+   * Driver clicks **Start Trip** -> status updates to **`GOING_TO_PICKUP`**.
+   * Driver arrives at pickup -> status updates to **`ARRIVED_AT_PICKUP`**.
+   * Driver verifies loading -> status updates to **`PICKUP_COMPLETED`**.
+   * `trip_status_history` receives timestamped log entries for each transition.
+6. **In Transit & Live GPS Tracking**:
+   * Driver proceeds on highway -> status updates to **`IN_TRANSIT`**.
+   * Driver GPS coordinates stream into `driver_locations` table.
+   * Live tracking map on Admin Website renders driver position in real time.
+7. **Delivery & Digital POD Upload**:
+   * Driver arrives at destination -> status updates to **`ARRIVED_AT_DELIVERY`**.
+   * Customer presents OTP. Driver captures recipient signature and photo.
+   * Driver submits Digital Proof of Delivery (POD).
+   * Status advances to **`DELIVERY_COMPLETED`**.
+   * `proof_of_delivery` row created.
+   * Admin Website displays signed POD document certificate and full audit timeline.

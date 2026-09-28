@@ -22,19 +22,21 @@ const PRESENTATION: Record<TripStatus, TripStatusPresentation> = {
   [TripStatus.Failed]: { label: "Failed", color: colors.error, softColor: colors.errorSoft },
 };
 
-export function getTripStatusPresentation(status: TripStatus): TripStatusPresentation {
-  return PRESENTATION[status];
+export function getTripStatusPresentation(status: TripStatus | string): TripStatusPresentation {
+  const normStatus = (String(status || "ASSIGNED")).toUpperCase() as TripStatus;
+  return PRESENTATION[normStatus] || PRESENTATION[TripStatus.Assigned];
 }
 
 /** Returns the next status in the standard flow, or null if terminal / not in flow. */
-export function getNextTripStatus(status: TripStatus): TripStatus | null {
-  const index = TRIP_STATUS_FLOW.indexOf(status);
+export function getNextTripStatus(status: TripStatus | string): TripStatus | null {
+  const normStatus = (String(status || "ASSIGNED")).toUpperCase() as TripStatus;
+  const index = TRIP_STATUS_FLOW.indexOf(normStatus);
   if (index === -1 || index === TRIP_STATUS_FLOW.length - 1) return null;
   return TRIP_STATUS_FLOW[index + 1];
 }
 
-/** Index of a status within the ordered flow, for progress-tracker rendering. Terminal
- * statuses (cancelled/failed) return -1 and should be rendered as an alert state instead. */
-export function getTripStatusStepIndex(status: TripStatus): number {
-  return TRIP_STATUS_FLOW.indexOf(status);
+/** Index of a status within the ordered flow, for progress-tracker rendering. */
+export function getTripStatusStepIndex(status: TripStatus | string): number {
+  const normStatus = (String(status || "ASSIGNED")).toUpperCase() as TripStatus;
+  return TRIP_STATUS_FLOW.indexOf(normStatus);
 }

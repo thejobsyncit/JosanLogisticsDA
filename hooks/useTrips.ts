@@ -36,8 +36,16 @@ export function useDashboard() {
         if (active) setState({ data: null, isLoading: false, error: e instanceof Error ? e.message : "Failed to load dashboard." });
       }
     );
+
+    const unsubscribe = tripsService.subscribeToDriverTrips("all", () => {
+      tripsService.getDashboardSummary().then((data) => {
+        if (active) setState({ data, isLoading: false, error: null });
+      });
+    });
+
     return () => {
       active = false;
+      unsubscribe();
     };
   }, []);
 
@@ -71,8 +79,16 @@ export function useTripList(filter: TripListFilter) {
         if (active) setState({ data: null, isLoading: false, error: e instanceof Error ? e.message : "Failed to load trips." });
       }
     );
+
+    const unsubscribe = tripsService.subscribeToDriverTrips("all", () => {
+      tripsService.getTrips(filter).then((data) => {
+        if (active) setState({ data, isLoading: false, error: null });
+      });
+    });
+
     return () => {
       active = false;
+      unsubscribe();
     };
   }, [filter]);
 
@@ -109,8 +125,16 @@ export function useTrip(id: string | undefined) {
         if (active) setState({ data: null, isLoading: false, error: e instanceof Error ? e.message : "Failed to load trip." });
       }
     );
+
+    const unsubscribe = tripsService.subscribeToDriverTrips(id, () => {
+      tripsService.getTripById(id).then((data) => {
+        if (active) setState({ data, isLoading: false, error: null });
+      });
+    });
+
     return () => {
       active = false;
+      unsubscribe();
     };
   }, [id]);
 

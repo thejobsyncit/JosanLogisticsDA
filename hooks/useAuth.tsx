@@ -37,6 +37,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(restored.token);
       setDriver(restored.driver);
       setIsBootstrapping(false);
+
+      try {
+        const freshDriver = await authService.fetchCurrentDriver();
+        setDriver(freshDriver);
+      } catch (err) {
+        console.warn("Failed to fetch fresh driver profile on boot:", err);
+      }
     })();
   }, []);
 

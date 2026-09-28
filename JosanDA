@@ -1,0 +1,137 @@
+# Implementation Plan - Production Supabase Backend Integration for Josan Driver App
+
+Connect the existing Josan Logistics Driver App (`React Native` / `Expo SDK 57`) to the shared production **Supabase backend** (`https://xewecflkzxgnczukaana.supabase.co`) used by the **Josan Logistics Admin Website**.
+
+> [!IMPORTANT]
+> - **Architecture Requirement**: The Driver App and Admin Website are independent clients that communicate **exclusively** through the shared Supabase backend.
+> - **Zero UI Redesign**: Existing screens, layouts, navigation, and components are preserved exactly as designed. Mock data is replaced with live Supabase database queries and Realtime subscriptions.
+
+---
+
+## Technical Audit & Discoveries
+
+### 1. Existing Backend Discovered
+- **Supabase Production Instance**: `https://xewecflkzxgnczukaana.supabase.co`
+- **Database Schema**: 11 core tables defined in `supabase/schema.sql`:
+  - `public.profiles`: User identity and roles (`ADMIN`, `DISPATCHER`, `DRIVER`, `CUSTOMER`).
+  - `public.drivers`: Driver profile, vehicle assignment, duty status, telematics (`id`, `profile_id`, `name`, `phone`, `email`, `vehicle_plate`, `current_latitude`, `current_longitude`, etc.).
+  - `public.shipments`: Consignment records with tracking numbers, assigned `driver_id`, addresses, coordinates, timeline, and exact status values.
+  - `public.trip_status_history`: Audit log tracking status changes with GPS timestamps.
+  - `public.driver_locations`: Real-time GPS telematics stream with DB triggers updating `drivers.current_latitude/longitude`.
+  - `public.proof_of_delivery`: Digital POD records with `signature_url`, `photo_url`, `receiver_name`, and timestamp.
+  - `public.notifications`: System and user push/in-app alert records.
+
+### 2. Mock & Fallback Data Identified
+- `services/mockData.ts`: Contains static fallback data `MOCK_TRIPS` (`TRIP-2026-001`, `TRIP-2026-002`, `TRIP-2026-003`), `MOCK_PERFORMANCE`, `MOCK_DOCUMENTS`, `MOCK_NOTIFICATIONS`.
+- `services/auth.ts`, `services/trips.ts`, `services/driver.ts`, `services/notifications.ts`: Had `__DEV__` fallback handlers returning mock data when REST endpoints failed.
+
+### 3. Status Value Alignment
+- Database constraint in `public.shipments`:
+  `CHECK (status IN ('ASSIGNED', 'ACCEPTED', 'GOING_TO_PICKUP', 'ARRIVED_AT_PICKUP', 'PICKUP_COMPLETED', 'IN_TRANSIT', 'ARRIVED_AT_DELIVERY', 'DELIVERY_COMPLETED', 'CANCELLED'))`
+- Update `types/trip.ts` `TripStatus` enum and mapping functions to enforce uppercase status values matching the backend and Admin Website.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> 1. **Supabase Package Dependency**: Install `@supabase/supabase-js` in `josan-driver-app`.
+> 2. **Environment Variables**: Add `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` in `.env`.
+> 3. **Storage Bucket**: Ensure the `proof-of-delivery` storage bucket is public/accessible in Supabase for POD images/signatures.
+
+---
+
+## Proposed Changes
+
+### Configuration & Services Infrastructure
+
+#### [NEW] [supabase.ts](file:///e:/josan-driver-native-clean/services/supabase.ts)
+- Create initialized Supabase client configured with `@react-native-async-storage/async-storage` for persistent session management.
+- Configure automatic token refresh and Realtime channel connections.
+
+#### [MODIFY] [.env](file:///e:/josan-driver-native-clean/.env)
+- Add production Supabase URL & Anon Key:
+  - `EXPO_PUBLIC_SUPABASE_URL=https://xewecflkzxgnczukaana.supabase.co`
+  - `EXPO_PUBLIC_SUPABASE_ANON_KEY=...`
+
+#### [MODIFY] [package.json](file:///e:/josan-driver-native-clean/package.json)
+- Add `@supabase/supabase-js` dependency.
+
+---
+
+### Data Models & Service Layer
+
+#### [MODIFY] [types/trip.ts](file:///e:/josan-driver-native-clean/types/trip.ts)
+- Update `TripStatus` enum to uppercase values: `ASSIGNED`, `ACCEPTED`, `GOING_TO_PICKUP`, `ARRIVED_AT_PICKUP`, `PICKUP_COMPLETED`, `IN_TRANSIT`, `ARRIVED_AT_DELIVERY`, `DELIVERY_COMPLETED`, `CANCELLED`.
+- Define database-to-app record mapping helper `mapDbShipmentToTrip()`.
+
+#### [MODIFY] [services/auth.ts](file:///e:/josan-driver-native-clean/services/auth.ts)
+- Implement `login({ email, password })` via `supabase.auth.signInWithPassword()`.
+- Fetch `profile` and associated `drivers` record using `auth.uid()`.
+- Persist secure session and driver context.
+
+#### [MODIFY] [services/trips.ts](file:///e:/josan-driver-native-clean/services/trips.ts)
+- Implement `getMyTrips()` querying `shipments` table filtered by `driver_id = current_driver.id`.
+- Implement `getTripById(id)` querying single `shipments` record.
+- Implement `acceptTrip(id)` and `advanceTripStatus(id, newStatus)` updating `shipments.status` in Supabase (triggers automatic insertion into `trip_status_history`).
+- Implement `submitProofOfDelivery(id, pod)`:
+  1. Upload signature and photo binary blobs to Supabase Storage bucket `proof-of-delivery`.
+  2. Insert POD row into `public.proof_of_delivery`.
+  3. Update `shipments.status` to `DELIVERY_COMPLETED` and embed `pod` JSON metadata.
+- Implement `subscribeToDriverTrips(driverId, onUpdate)` listening to Supabase Realtime Postgres Changes on `shipments` table.
+
+#### [MODIFY] [services/location.ts](file:///e:/josan-driver-native-clean/services/location.ts)
+- Update `reportLocation(driverId, location)` to insert telemetry records into `public.driver_locations` table (triggers automatic DB update of driver's current coordinates for Admin Website live view).
+
+#### [MODIFY] [services/notifications.ts](file:///e:/josan-driver-native-clean/services/notifications.ts)
+- Fetch notifications from `public.notifications` table for `user_id = current_driver.id` or `user_id = 'all'`.
+
+#### [MODIFY] [services/driver.ts](file:///e:/josan-driver-native-clean/services/driver.ts)
+- Update duty status (`Available`, `On Delivery`, `In Transit`, `Offline`) in `public.drivers` table.
+
+---
+
+### Context & Screen Connections
+
+#### [MODIFY] [context/AuthContext.tsx](file:///e:/josan-driver-native-clean/context/AuthContext.tsx)
+- Integrate Supabase auth state listener (`supabase.auth.onAuthStateChange`).
+- Restore active driver profile on startup.
+
+#### [MODIFY] [app/(tabs)/dashboard.tsx](file:///e:/josan-driver-native-clean/app/(tabs)/dashboard.tsx)
+- Wire real-time dashboard stats and active trip from Supabase.
+- Subscribe to Realtime updates so newly assigned trips appear dynamically.
+
+#### [MODIFY] [app/(tabs)/trips.tsx](file:///e:/josan-driver-native-clean/app/(tabs)/trips.tsx)
+- Render live shipments assigned to the logged-in driver, categorized by `today`, `upcoming`, `completed`.
+
+#### [MODIFY] [app/trip/[id].tsx](file:///e:/josan-driver-native-clean/app/trip/[id].tsx), [app/pickup/[id].tsx](file:///e:/josan-driver-native-clean/app/pickup/[id].tsx), [app/delivery/[id].tsx](file:///e:/josan-driver-native-clean/app/delivery/[id].tsx), [app/pod/[id].tsx](file:///e:/josan-driver-native-clean/app/pod/[id].tsx)
+- Pass status transitions to Supabase `trips` service.
+- Enable smooth live updates visible on Admin Website.
+
+---
+
+## Verification Plan
+
+### Automated Verification
+- Run `npm run typecheck` to verify TypeScript compile-time safety.
+- Run `npm run lint` to confirm code style adherence.
+
+### End-to-End Manual Testing Procedure (Admin ↔ Driver Flow)
+1. **Admin Login & Assignment**: Admin Website creates shipment `JOS-TEST-001` and assigns to Driver `DRV-101`.
+2. **Driver Login**: Driver App logs in with driver credentials (`tan.weiming@josanlogistics.com`).
+3. **Trip Appearance**: Driver sees `JOS-TEST-001` on Dashboard / My Trips via Supabase query & Realtime.
+4. **Status Progression**:
+   - Driver presses "Accept Trip" -> Status becomes `ACCEPTED`. Admin Website sees `ACCEPTED`.
+   - Driver presses "Go to Pickup" -> Status becomes `GOING_TO_PICKUP`.
+   - Driver presses "Mark Arrived" -> Status becomes `ARRIVED_AT_PICKUP`.
+   - Driver completes pickup -> Status becomes `PICKUP_COMPLETED`.
+   - Driver starts transit -> Status becomes `IN_TRANSIT`.
+   - Driver reaches destination -> Status becomes `ARRIVED_AT_DELIVERY`.
+5. **Proof of Delivery & Completion**:
+   - Driver submits signature, photo, and receiver name.
+   - Files upload to Supabase Storage.
+   - Status updates to `DELIVERY_COMPLETED`.
+   - Admin Website sees `DELIVERY_COMPLETED` and opens POD certificate.
+6. **Location Telematics**:
+   - Driver location pings insert into `driver_locations`.
+   - Admin Website map reflects driver's latest position.

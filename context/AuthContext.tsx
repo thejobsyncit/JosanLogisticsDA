@@ -1,15 +1,16 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import * as authService from "@/services/auth";
 import * as driverService from "@/services/driver";
+import { supabase } from "@/services/supabase";
 import type { Driver, DutyStatus } from "@/types/driver";
 
 interface AuthContextType {
   driver: Driver | null;
   token: string | null;
   isLoading: boolean;
-  login: (emailOrPhone: string) => Promise<void>;
+  login: (emailOrPhone: string, password?: string) => Promise<void>;
   logout: () => Promise<void>;
-  updateStatus: (status: DutyStatus | 'online' | 'offline' | 'on_break') => Promise<void>;
+  updateStatus: (status: DutyStatus | "online" | "offline" | "on_break") => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -38,6 +39,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const fetched = await authService.fetchCurrentDriver();
             setDriver(fetched);
           }
+        } else {
+          // Check active Supabase Auth session
+          const { data: { session: sbSession } } = await supabase.auth.getSession();
+          if (sbSession) {
+            setToken(sbSession.access_token);
+            const profile = await authService.fetchCurrentDriver();
+            setDriver(profile);
+          }
         }
       } catch (err) {
         console.warn("Auth initialization error:", err);
@@ -45,13 +54,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsLoading(false);
       }
     }
+
     initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session) {
+        setToken(session.access_token);
+        const profile = await authService.fetchCurrentDriver();
+        setDriver(profile);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const login = async (identifier: string) => {
+  const login = async (identifier: string, password?: string) => {
     setIsLoading(true);
     try {
-      const res = await authService.login({ employeeIdOrPhone: identifier, password: "password123" });
+      const res = await authService.login({
+        employeeIdOrPhone: identifier,
+        password: password || "driver123",
+      });
       if (res.token) {
         setToken(res.token);
         const profile = await authService.fetchCurrentDriver();
@@ -73,13 +98,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const updateStatus = async (newStatus: DutyStatus | 'online' | 'offline' | 'on_break') => {
+  const updateStatus = async (newStatus: DutyStatus | "online" | "offline" | "on_break") => {
     if (!driver) return;
     try {
       await driverService.setDutyStatus(newStatus);
-      setDriver((prev) => (prev ? { ...prev, dutyStatus: newStatus as DutyStatus } : null));
+      setDriver((prev) => (prev ? { ...prev, dutyStatus: newStatus === "offline" ? "offline" : "online" } : null));
     } catch (err: any) {
-      alert(err.message || "Failed to update driver status.");
+      console.warn("Failed to update driver status:", err);
     }
   };
 

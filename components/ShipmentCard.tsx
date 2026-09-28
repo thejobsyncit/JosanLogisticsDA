@@ -1,10 +1,8 @@
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { colors, spacing, typography } from "@constants/theme";
-import { Card } from "./Card";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { colors, radius, shadow, spacing, typography } from "@constants/theme";
 import { StatusBadge } from "./StatusBadge";
-import { PrimaryButton } from "./PrimaryButton";
-import { SecondaryButton } from "./SecondaryButton";
 import type { Trip } from "@/types/trip";
 import { formatDistanceKm, formatTime, formatWeightKg } from "@utils/format";
 
@@ -14,121 +12,289 @@ interface ShipmentCardProps {
   onNavigate: () => void;
 }
 
-/** Featured "active shipment" card — used on the Dashboard and Active Shipment screen. */
+/** Featured "active shipment" card — premium redesign matching Singapore logistics standards. */
 export function ShipmentCard({ trip, onViewDetails, onNavigate }: ShipmentCardProps) {
+  const pickupAddress = trip.pickup.line1
+    ? `${trip.pickup.line1}${trip.pickup.postalCode ? `, Singapore ${trip.pickup.postalCode}` : ""}`
+    : "Singapore Central Hub";
+
+  const deliveryAddress = trip.delivery.line1
+    ? `${trip.delivery.line1}${trip.delivery.postalCode ? `, Singapore ${trip.delivery.postalCode}` : ""}`
+    : "Singapore Logistics Terminal";
+
   return (
-    <Card style={styles.card}>
-      <Text style={styles.eyebrow}>ACTIVE SHIPMENT</Text>
-      <View style={styles.row}>
-        <Text style={styles.reference}>{trip.shipment.reference}</Text>
+    <View style={styles.card}>
+      {/* Top Header Row */}
+      <View style={styles.headerRow}>
+        <View style={styles.titleWrap}>
+          <View style={styles.boxIconCircle}>
+            <Ionicons name="cube" size={20} color={colors.primary} />
+          </View>
+          <Text style={styles.cardTitle}>Active Shipment</Text>
+        </View>
         <StatusBadge status={trip.status} />
       </View>
 
-      <View style={styles.route}>
-        <View style={styles.routeRow}>
-          <View style={[styles.dot, { backgroundColor: colors.primary }]} />
-          <Text style={styles.routeText} numberOfLines={1}>
-            {trip.pickup.line1}
-          </Text>
+      {/* Shipment Reference Code */}
+      <Text style={styles.reference}>{trip.reference}</Text>
+
+      {/* Main Body: Route + Metrics Grid */}
+      <View style={styles.bodyGrid}>
+        {/* Left Column: Route Visualizer */}
+        <View style={styles.routeCol}>
+          {/* Pickup Point */}
+          <View style={styles.addressRow}>
+            <View style={[styles.pinCircle, { backgroundColor: "rgba(201, 106, 50, 0.15)" }]}>
+              <Ionicons name="location" size={16} color={colors.primary} />
+            </View>
+            <Text style={styles.addressText} numberOfLines={2}>
+              {pickupAddress}
+            </Text>
+          </View>
+
+          {/* Route Connecting Line */}
+          <View style={styles.connectorLineWrap}>
+            <View style={styles.verticalLine} />
+          </View>
+
+          {/* Delivery Point */}
+          <View style={styles.addressRow}>
+            <View style={[styles.pinCircle, { backgroundColor: "rgba(212, 175, 90, 0.25)" }]}>
+              <Ionicons name="location" size={16} color="#B48B28" />
+            </View>
+            <Text style={styles.addressText} numberOfLines={2}>
+              {deliveryAddress}
+            </Text>
+          </View>
         </View>
-        <View style={styles.routeLine} />
-        <View style={styles.routeRow}>
-          <View style={[styles.dot, { backgroundColor: colors.gold }]} />
-          <Text style={styles.routeText} numberOfLines={1}>
-            {trip.delivery.line1}
-          </Text>
+
+        {/* Vertical Divider */}
+        <View style={styles.dividerLine} />
+
+        {/* Right Column: Key Metrics */}
+        <View style={styles.metricsCol}>
+          {/* Metric 1: Weight */}
+          <View style={styles.metricItem}>
+            <View style={styles.metricIconCircle}>
+              <Ionicons name="scale-outline" size={16} color="#B48B28" />
+            </View>
+            <View style={styles.metricTextWrap}>
+              <Text style={styles.metricLabel}>Weight</Text>
+              <Text style={styles.metricValue}>{formatWeightKg(trip.shipment.weightKg)}</Text>
+            </View>
+          </View>
+
+          {/* Metric 2: Distance */}
+          <View style={styles.metricItem}>
+            <View style={styles.metricIconCircle}>
+              <Ionicons name="map-outline" size={16} color="#B48B28" />
+            </View>
+            <View style={styles.metricTextWrap}>
+              <Text style={styles.metricLabel}>Distance</Text>
+              <Text style={styles.metricValue}>{formatDistanceKm(trip.distanceKm)}</Text>
+            </View>
+          </View>
+
+          {/* Metric 3: ETA */}
+          <View style={styles.metricItem}>
+            <View style={styles.metricIconCircle}>
+              <Ionicons name="time-outline" size={16} color="#B48B28" />
+            </View>
+            <View style={styles.metricTextWrap}>
+              <Text style={styles.metricLabel}>ETA</Text>
+              <Text style={styles.metricValue}>{formatTime(trip.estimatedArrival)}</Text>
+            </View>
+          </View>
         </View>
       </View>
 
-      <View style={styles.metaRow}>
-        <View>
-          <Text style={styles.metaLabel}>ETA</Text>
-          <Text style={styles.metaValue}>{formatTime(trip.estimatedArrival)}</Text>
-        </View>
-        <View>
-          <Text style={styles.metaLabel}>Weight</Text>
-          <Text style={styles.metaValue}>{formatWeightKg(trip.shipment.weightKg)}</Text>
-        </View>
-        <View>
-          <Text style={styles.metaLabel}>Distance</Text>
-          <Text style={styles.metaValue}>{formatDistanceKm(trip.distanceKm)}</Text>
-        </View>
-      </View>
+      {/* Action Buttons Row */}
+      <View style={styles.actionsRow}>
+        <Pressable
+          onPress={onViewDetails}
+          accessibilityRole="button"
+          accessibilityLabel="View Details"
+          style={({ pressed }) => [styles.viewBtn, pressed && styles.btnPressed]}
+        >
+          <Ionicons name="map-outline" size={18} color={colors.primary} style={{ marginRight: 6 }} />
+          <Text style={styles.viewBtnText}>View Details</Text>
+        </Pressable>
 
-      <View style={styles.actions}>
-        <SecondaryButton label="View Details" onPress={onViewDetails} style={styles.actionButton} />
-        <PrimaryButton label="Navigate" onPress={onNavigate} style={styles.actionButton} />
+        <Pressable
+          onPress={onNavigate}
+          accessibilityRole="button"
+          accessibilityLabel="Navigate"
+          style={({ pressed }) => [styles.navigateBtn, pressed && styles.btnPressed]}
+        >
+          <Ionicons name="navigate" size={18} color={colors.white} style={{ marginRight: 6 }} />
+          <Text style={styles.navigateBtnText}>Navigate</Text>
+        </Pressable>
       </View>
-    </Card>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    gap: spacing.sm + 4,
+    backgroundColor: colors.white,
+    borderRadius: 20,
+    padding: spacing.lg,
+    borderWidth: 1.2,
+    borderColor: "rgba(212, 175, 90, 0.35)",
+    gap: spacing.md - 2,
+    ...shadow.card,
   },
-  eyebrow: {
-    fontSize: typography.caption.fontSize,
-    fontWeight: "700",
-    color: colors.primary,
-    letterSpacing: 0.5,
-  },
-  row: {
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
+  titleWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  boxIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(201, 106, 50, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: colors.darkCharcoal,
+  },
   reference: {
-    fontSize: typography.h3.fontSize,
-    fontWeight: typography.h3.fontWeight,
-    color: colors.textPrimary,
+    fontSize: 22,
+    fontWeight: "800",
+    color: colors.darkCharcoal,
+    letterSpacing: 0.3,
+    marginTop: -2,
   },
-  route: {
-    gap: 4,
+  bodyGrid: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 4,
   },
-  routeRow: {
+  routeCol: {
+    flex: 1.3,
+    gap: 6,
+    paddingRight: 8,
+  },
+  addressRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: spacing.sm + 2,
+    gap: 8,
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginTop: 6,
-  },
-  routeLine: {
-    width: 2,
-    height: 16,
-    backgroundColor: colors.border,
-    marginLeft: 3,
-  },
-  routeText: {
-    flex: 1,
-    fontSize: typography.bodySmall.fontSize,
-    color: colors.textPrimary,
-  },
-  metaRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  metaLabel: {
-    fontSize: typography.caption.fontSize,
-    color: colors.textSecondary,
-  },
-  metaValue: {
-    fontSize: typography.bodyMedium.fontSize,
-    fontWeight: "600",
-    color: colors.textPrimary,
+  pinCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 2,
   },
-  actions: {
-    flexDirection: "row",
-    gap: spacing.sm + 2,
-  },
-  actionButton: {
+  addressText: {
     flex: 1,
-    minHeight: 48,
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.darkCharcoal,
+    lineHeight: 18,
+  },
+  connectorLineWrap: {
+    paddingLeft: 12,
+    marginVertical: 1,
+  },
+  verticalLine: {
+    width: 2,
+    height: 18,
+    backgroundColor: colors.borderGold,
+    borderRadius: 1,
+  },
+  dividerLine: {
+    width: 1,
+    height: "90%",
+    backgroundColor: "rgba(212, 175, 90, 0.3)",
+    marginHorizontal: 10,
+  },
+  metricsCol: {
+    flex: 1,
+    gap: 10,
+    paddingLeft: 4,
+  },
+  metricItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  metricIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(212, 175, 90, 0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  metricTextWrap: {
+    flex: 1,
+  },
+  metricLabel: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontWeight: "500",
+  },
+  metricValue: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: colors.darkCharcoal,
+  },
+  actionsRow: {
+    flexDirection: "row",
+    gap: spacing.sm + 4,
+    marginTop: 4,
+  },
+  viewBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "#FFFDF8",
+    borderWidth: 1.5,
+    borderColor: "#D4AF5A",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewBtnText: {
+    fontSize: typography.button.fontSize,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  navigateBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  navigateBtnText: {
+    fontSize: typography.button.fontSize,
+    fontWeight: "700",
+    color: colors.white,
+  },
+  btnPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
   },
 });
 

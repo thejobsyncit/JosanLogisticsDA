@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -12,6 +14,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radius, spacing, typography } from "@constants/theme";
 import { useAuth } from "@/hooks/useAuth";
@@ -32,7 +35,7 @@ const MENU_ITEMS: { key: string; label: string; icon: keyof typeof Ionicons.glyp
   { key: "help", label: "Help & Support", icon: "help-circle-outline", route: "/help" },
 ];
 
-/** Driver Profile — identity, performance summary, account editing, and actions. */
+/** Driver Profile — identity, performance summary, account editing, photo upload & editing. */
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -41,12 +44,15 @@ export default function ProfileScreen() {
   const [confirmingLogout, setConfirmingLogout] = useState(false);
   const [showSosModal, setShowSosModal] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [showPhotoOptions, setShowPhotoOptions] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
   // Profile Edit Form State
   const [editName, setEditName] = useState(driver?.name ?? "");
   const [editPhone, setEditPhone] = useState(driver?.phone ?? "");
   const [editEmail, setEditEmail] = useState(driver?.email ?? "");
   const [editVehiclePlate, setEditVehiclePlate] = useState(driver?.vehiclePlate ?? "");
+  const [editAvatarUrl, setEditAvatarUrl] = useState(driver?.avatarUrl ?? "");
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; phone?: string; email?: string }>({});
 
@@ -55,8 +61,68 @@ export default function ProfileScreen() {
     setEditPhone(driver?.phone ?? "");
     setEditEmail(driver?.email ?? "");
     setEditVehiclePlate(driver?.vehiclePlate ?? "");
+    setEditAvatarUrl(driver?.avatarUrl ?? "");
     setErrors({});
     setIsEditingProfile(true);
+  };
+
+  const handlePickImage = async (source: "camera" | "library") => {
+    setShowPhotoOptions(false);
+    try {
+      if (source === "camera") {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert("Permission Required", "Camera permission is needed to take a profile photo.");
+          return;
+        }
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert("Permission Required", "Photo gallery access is needed to select a profile photo.");
+          return;
+        }
+      }
+
+      const pickerOptions: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ["images"],
+        allowsEditing: true, // Opens built-in crop & edit interface
+        aspect: [1, 1],
+        quality: 0.8,
+      };
+
+      const result =
+        source === "camera"
+          ? await ImagePicker.launchCameraAsync(pickerOptions)
+          : await ImagePicker.launchImageLibraryAsync(pickerOptions);
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const newUri = result.assets[0].uri;
+        setEditAvatarUrl(newUri);
+        
+        // Save immediately to backend & state
+        setIsUploadingPhoto(true);
+        await updateProfile({ avatarUrl: newUri });
+        Alert.alert("Success", "Profile photo updated successfully!");
+      }
+    } catch (err: any) {
+      Alert.alert("Error", err?.message || "Failed to update profile photo.");
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    setShowPhotoOptions(false);
+    try {
+      setIsUploadingPhoto(true);
+      setEditAvatarUrl("");
+      await updateProfile({ avatarUrl: "" });
+      Alert.alert("Photo Removed", "Profile photo has been removed.");
+    } catch (err: any) {
+      Alert.alert("Error", err?.message || "Failed to remove photo.");
+    } finally {
+      setIsUploadingPhoto(false);
+    }
   };
 
   const handleSaveProfile = async () => {
@@ -75,6 +141,7 @@ export default function ProfileScreen() {
         phone: editPhone.trim(),
         email: editEmail.trim(),
         vehiclePlate: editVehiclePlate.trim() || undefined,
+        avatarUrl: editAvatarUrl,
       });
       setIsEditingProfile(false);
       Alert.alert("Success", "Profile updated successfully!");
@@ -84,6 +151,8 @@ export default function ProfileScreen() {
       setSaving(false);
     }
   };
+
+  const currentPhoto = isEditingProfile ? editAvatarUrl : driver?.avatarUrl;
 
   return (
     <ScrollView
@@ -95,16 +164,27 @@ export default function ProfileScreen() {
     >
       <View style={styles.header}>
         <View style={styles.avatarWrap}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initialsFromName(driver?.name ?? "Driver")}</Text>
-          </View>
+          <Pressable
+            style={styles.avatar}
+            onPress={() => setShowPhotoOptions(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Change profile photo"
+          >
+            {isUploadingPhoto ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : driver?.avatarUrl ? (
+              <Image source={{ uri: driver.avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarText}>{initialsFromName(driver?.name ?? "Driver")}</Text>
+            )}
+          </Pressable>
           <Pressable
             style={styles.avatarEditBadge}
             accessibilityRole="button"
-            accessibilityLabel="Edit profile"
-            onPress={openEditModal}
+            accessibilityLabel="Edit profile photo"
+            onPress={() => setShowPhotoOptions(true)}
           >
-            <Ionicons name="pencil" size={14} color={colors.white} />
+            <Ionicons name="camera" size={14} color={colors.white} />
           </Pressable>
         </View>
 
@@ -181,6 +261,42 @@ export default function ProfileScreen() {
         <Text style={styles.logoutLabel}>Log Out</Text>
       </Pressable>
 
+      {/* Photo Options Modal */}
+      <Modal
+        visible={showPhotoOptions}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowPhotoOptions(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowPhotoOptions(false)}>
+          <View style={styles.actionSheetContainer}>
+            <Text style={styles.actionSheetTitle}>Profile Photo</Text>
+            <Text style={styles.actionSheetSubtitle}>Add or edit your profile picture</Text>
+
+            <Pressable style={styles.actionOption} onPress={() => handlePickImage("camera")}>
+              <Ionicons name="camera-outline" size={22} color={colors.primary} />
+              <Text style={styles.actionOptionText}>Take Photo</Text>
+            </Pressable>
+
+            <Pressable style={styles.actionOption} onPress={() => handlePickImage("library")}>
+              <Ionicons name="images-outline" size={22} color={colors.primary} />
+              <Text style={styles.actionOptionText}>Choose from Gallery</Text>
+            </Pressable>
+
+            {currentPhoto ? (
+              <Pressable style={styles.actionOption} onPress={handleRemovePhoto}>
+                <Ionicons name="trash-outline" size={22} color={colors.error} />
+                <Text style={[styles.actionOptionText, { color: colors.error }]}>Remove Current Photo</Text>
+              </Pressable>
+            ) : null}
+
+            <Pressable style={styles.actionCancel} onPress={() => setShowPhotoOptions(false)}>
+              <Text style={styles.actionCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
       {/* Edit Profile Modal */}
       <Modal visible={isEditingProfile} animationType="slide" transparent onRequestClose={() => setIsEditingProfile(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.modalOverlay}>
@@ -193,6 +309,28 @@ export default function ProfileScreen() {
             </View>
 
             <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
+              {/* Profile Photo Editor Section in Modal */}
+              <View style={styles.modalAvatarContainer}>
+                <View style={styles.modalAvatarWrap}>
+                  <View style={styles.avatar}>
+                    {editAvatarUrl ? (
+                      <Image source={{ uri: editAvatarUrl }} style={styles.avatarImage} />
+                    ) : (
+                      <Text style={styles.avatarText}>{initialsFromName(editName || "Driver")}</Text>
+                    )}
+                  </View>
+                  <Pressable style={styles.avatarEditBadge} onPress={() => setShowPhotoOptions(true)}>
+                    <Ionicons name="camera" size={14} color={colors.white} />
+                  </Pressable>
+                </View>
+                <Pressable style={styles.changePhotoButton} onPress={() => setShowPhotoOptions(true)}>
+                  <Ionicons name="image-outline" size={16} color={colors.primary} />
+                  <Text style={styles.changePhotoText}>
+                    {editAvatarUrl ? "Change Photo" : "Add Profile Photo"}
+                  </Text>
+                </Pressable>
+              </View>
+
               <TextField
                 label="Full Name"
                 value={editName}
@@ -295,6 +433,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primarySoft,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  avatarImage: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    resizeMode: "cover",
   },
   avatarText: {
     fontSize: typography.h2.fontSize,
@@ -422,6 +567,26 @@ const styles = StyleSheet.create({
     fontWeight: typography.h2.fontWeight,
     color: colors.textPrimary,
   },
+  modalAvatarContainer: {
+    alignItems: "center",
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  modalAvatarWrap: {
+    position: "relative",
+  },
+  changePhotoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  changePhotoText: {
+    fontSize: typography.bodySmall.fontSize,
+    fontWeight: "600",
+    color: colors.primary,
+  },
   formContent: {
     gap: spacing.md,
     paddingBottom: spacing.lg,
@@ -438,5 +603,51 @@ const styles = StyleSheet.create({
     fontSize: typography.bodySmall.fontSize,
     color: colors.textSecondary,
     fontWeight: "600",
+  },
+
+  // Action Sheet / Photo Modal Styles
+  actionSheetContainer: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: radius.sheet,
+    borderTopRightRadius: radius.sheet,
+    padding: spacing.lg,
+    gap: spacing.sm,
+    width: "100%",
+  },
+  actionSheetTitle: {
+    fontSize: typography.h3.fontSize,
+    fontWeight: typography.h3.fontWeight,
+    color: colors.textPrimary,
+    textAlign: "center",
+  },
+  actionSheetSubtitle: {
+    fontSize: typography.bodySmall.fontSize,
+    color: colors.textSecondary,
+    textAlign: "center",
+    marginBottom: spacing.xs,
+  },
+  actionOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.background,
+    borderRadius: radius.button,
+  },
+  actionOptionText: {
+    fontSize: typography.bodyMedium.fontSize,
+    fontWeight: "600",
+    color: colors.textPrimary,
+  },
+  actionCancel: {
+    marginTop: spacing.xs,
+    paddingVertical: spacing.md,
+    alignItems: "center",
+  },
+  actionCancelText: {
+    fontSize: typography.bodyMedium.fontSize,
+    fontWeight: "700",
+    color: colors.textSecondary,
   },
 });

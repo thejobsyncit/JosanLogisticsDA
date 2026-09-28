@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, spacing, typography } from "@constants/theme";
@@ -13,10 +13,13 @@ import { LoadingState } from "@/components/LoadingState";
 import { ErrorState } from "@/components/ErrorState";
 import { EmptyState } from "@/components/EmptyState";
 import { initialsFromName } from "@utils/format";
+import { SingaporeHeaderGraphic } from "@/components/dashboard/SingaporeHeaderGraphic";
+import { JosanLogo } from "@/components/dashboard/JosanLogo";
+import { StatTile } from "@/components/dashboard/StatTile";
 
 /**
- * Dashboard — driver greeting + duty status, the active shipment (if any),
- * today's pickup/delivery/completed stats, and a preview of today's trips.
+ * Dashboard — premium driver greeting + duty status, active shipment,
+ * daily performance statistics grid, and today's trips preview.
  */
 export default function DashboardScreen() {
   const router = useRouter();
@@ -38,148 +41,207 @@ export default function DashboardScreen() {
 
   const activeTrip = data?.activeTrip ?? null;
   const todayTrips = data?.todayTrips ?? [];
+  const driverFirstName = driver?.name?.split(" ")[0] ?? "Tan";
+  const driverInitials = initialsFromName(driver?.name ?? "Tan Wei");
 
   return (
-    <ScrollView
-      style={styles.flex}
-      contentContainerStyle={[
-        styles.content,
-        { paddingTop: Math.max(insets.top + spacing.sm, spacing.lg) },
-      ]}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-    >
-      <View style={styles.greetingRow}>
-        <View>
-          <Text style={styles.greeting}>Good day, {driver?.name?.split(" ")[0] ?? "Driver"}</Text>
+    <View style={styles.flex}>
+      {/* Subtle Vector Background Graphic for Header */}
+      <SingaporeHeaderGraphic height={210} />
+
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: Math.max(insets.top + spacing.xs, spacing.md) },
+        ]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Brand Header Bar */}
+        <View style={styles.topBrandRow}>
+          <JosanLogo size={28} />
+          <Pressable
+            onPress={() => router.push("/(tabs)/profile")}
+            accessibilityRole="button"
+            accessibilityLabel="Driver Profile"
+            style={({ pressed }) => [styles.avatar, pressed && styles.avatarPressed]}
+          >
+            <Text style={styles.avatarText}>{driverInitials}</Text>
+          </Pressable>
+        </View>
+
+        {/* Greeting Banner */}
+        <View style={styles.greetingSection}>
+          <Text style={styles.greeting}>Good day, {driverFirstName}</Text>
           <Text style={styles.subGreeting}>Here's what's on your route today.</Text>
         </View>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initialsFromName(driver?.name ?? "D")}</Text>
+
+        {/* Driver Status Card */}
+        <DriverStatus status={status} onToggle={toggle} loading={statusLoading} />
+
+        {/* Active Shipment Card */}
+        {activeTrip ? (
+          <ShipmentCard
+            trip={activeTrip}
+            onViewDetails={() => router.push({ pathname: "/shipment/[id]", params: { id: activeTrip.id } })}
+            onNavigate={() => router.push({ pathname: "/tracking/[id]", params: { id: activeTrip.id } })}
+          />
+        ) : (
+          <EmptyState icon="cube-outline" title="No active shipment" description="You're all caught up — new trips will show up here." />
+        )}
+
+        {/* Daily Performance 2x2 Grid */}
+        <View style={styles.statsSection}>
+          <Text style={styles.sectionTitle}>Daily Performance</Text>
+          <View style={styles.statsGrid}>
+            <StatTile
+              label="Pending Pickups"
+              value={data?.pendingPickups ?? 0}
+              iconName="cube"
+              iconBg="rgba(201, 106, 50, 0.15)"
+              iconColor="#C96A32"
+              tileBg="#FFF8F0"
+              borderColor="#FCE8D5"
+              onPress={() => router.push("/(tabs)/trips")}
+            />
+
+            <StatTile
+              label="Pending Deliveries"
+              value={data?.pendingDeliveries ?? 0}
+              iconName="bus"
+              iconBg="rgba(212, 175, 90, 0.2)"
+              iconColor="#B48B28"
+              tileBg="#FFFDF0"
+              borderColor="#F9F1D8"
+              onPress={() => router.push("/(tabs)/trips")}
+            />
+
+            <StatTile
+              label="Completed Today"
+              value={data?.completedDeliveries ?? 0}
+              iconName="checkmark-circle"
+              iconBg="rgba(22, 163, 74, 0.15)"
+              iconColor="#16A34A"
+              tileBg="#F0FDF4"
+              borderColor="#DCFCE7"
+              onPress={() => router.push("/(tabs)/trips")}
+            />
+
+            <StatTile
+              label="Distance Today"
+              value={`${(data?.distanceTodayKm ?? 0).toFixed(1)} km`}
+              iconName="map"
+              iconBg="rgba(212, 175, 90, 0.2)"
+              iconColor="#B48B28"
+              tileBg="#FAF5EC"
+              borderColor="#F3E8D7"
+              onPress={() => router.push("/(tabs)/trips")}
+            />
+          </View>
         </View>
-      </View>
 
-      <DriverStatus status={status} onToggle={toggle} loading={statusLoading} />
-
-      {activeTrip ? (
-        <ShipmentCard
-          trip={activeTrip}
-          onViewDetails={() => router.push({ pathname: "/shipment/[id]", params: { id: activeTrip.id } })}
-          onNavigate={() => router.push({ pathname: "/tracking/[id]", params: { id: activeTrip.id } })}
-        />
-      ) : (
-        <EmptyState icon="cube-outline" title="No active shipment" description="You're all caught up — new trips will show up here." />
-      )}
-
-      <View style={styles.statsGrid}>
-        <StatTile label="Pending Pickups" value={data?.pendingPickups ?? 0} />
-        <StatTile label="Pending Deliveries" value={data?.pendingDeliveries ?? 0} />
-        <StatTile label="Completed Today" value={data?.completedDeliveries ?? 0} />
-        <StatTile label="Distance Today" value={`${(data?.distanceTodayKm ?? 0).toFixed(1)} km`} />
-      </View>
-
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Today's Trips</Text>
-        <Text style={styles.sectionLink} onPress={() => router.push("/(tabs)/trips")}>
-          View All
-        </Text>
-      </View>
-
-      {todayTrips.length === 0 ? (
-        <EmptyState icon="calendar-outline" title="No trips scheduled" description="Check back later for new assignments." />
-      ) : (
-        <View style={styles.tripList}>
-          {todayTrips.slice(0, 4).map((trip) => (
-            <TripCard key={trip.id} trip={trip} />
-          ))}
+        {/* Today's Trips Section */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Today's Trips</Text>
+          <Pressable onPress={() => router.push("/(tabs)/trips")} hitSlop={8}>
+            <Text style={styles.sectionLink}>View All</Text>
+          </Pressable>
         </View>
-      )}
-    </ScrollView>
-  );
-}
 
-function StatTile({ label, value }: { label: string; value: string | number }) {
-  return (
-    <View style={styles.statTile}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+        {todayTrips.length === 0 ? (
+          <EmptyState icon="calendar-outline" title="No trips scheduled" description="Check back later for new assignments." />
+        ) : (
+          <View style={styles.tripList}>
+            {todayTrips.slice(0, 4).map((trip) => (
+              <TripCard key={trip.id} trip={trip} />
+            ))}
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
-  greetingRow: {
+  content: {
+    paddingHorizontal: spacing.md + 2,
+    paddingBottom: spacing.xxl,
+    gap: spacing.md + 2,
+  },
+  topBrandRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-  },
-  greeting: {
-    fontSize: typography.h2.fontSize,
-    fontWeight: typography.h2.fontWeight,
-    color: colors.textPrimary,
-  },
-  subGreeting: {
-    fontSize: typography.bodySmall.fontSize,
-    color: colors.textSecondary,
-    marginTop: 2,
+    paddingTop: 4,
+    marginBottom: 4,
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.goldSoft,
-    borderWidth: 1,
-    borderColor: colors.gold,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#D4AF5A",
+    borderWidth: 2,
+    borderColor: "#E8D39A",
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: colors.darkCharcoal,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  avatarPressed: {
+    opacity: 0.8,
   },
   avatarText: {
-    fontSize: typography.bodyMedium.fontSize,
-    fontWeight: "700",
-    color: colors.primaryDark,
+    fontSize: 15,
+    fontWeight: "800",
+    color: colors.white,
+    letterSpacing: 0.5,
+  },
+  greetingSection: {
+    gap: 2,
+    marginBottom: 2,
+  },
+  greeting: {
+    fontSize: 26,
+    fontWeight: "900",
+    color: colors.darkCharcoal,
+    letterSpacing: -0.3,
+  },
+  subGreeting: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: colors.textSecondary,
+  },
+  statsSection: {
+    gap: 10,
+    marginTop: 4,
   },
   statsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: spacing.sm + 2,
-  },
-  statTile: {
-    flexBasis: "47%",
-    flexGrow: 1,
-    backgroundColor: colors.softBeige,
-    borderRadius: 16,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 4,
-  },
-  statValue: {
-    fontSize: typography.metric.fontSize,
-    fontWeight: typography.metric.fontWeight,
-    color: colors.darkCharcoal,
-  },
-  statLabel: {
-    fontSize: typography.caption.fontSize,
-    color: colors.textSecondary,
+    gap: 12,
   },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: spacing.xs,
+    marginTop: 4,
   },
   sectionTitle: {
-    fontSize: typography.h3.fontSize,
-    fontWeight: typography.h3.fontWeight,
-    color: colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "800",
+    color: colors.darkCharcoal,
   },
   sectionLink: {
-    fontSize: typography.bodySmall.fontSize,
+    fontSize: 14,
     fontWeight: "700",
     color: colors.primary,
   },
   tripList: {
-    gap: spacing.sm + 2,
+    gap: spacing.sm + 4,
   },
 });

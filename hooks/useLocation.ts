@@ -129,7 +129,32 @@ export function useRouteEstimate(
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetch = useCallback(async () => {
+  useEffect(() => {
+    let active = true;
+    if (!origin || !destination) return;
+    setIsLoading(true);
+    setError(null);
+    estimateOneMapRoute(origin, destination).then(
+      (result) => {
+        if (active) {
+          setRoute(result);
+          setIsLoading(false);
+        }
+      },
+      (e) => {
+        if (active) {
+          setError(e instanceof Error ? e.message : "Route unavailable.");
+          setIsLoading(false);
+        }
+      }
+    );
+    return () => {
+      active = false;
+    };
+  }, [origin, destination]);
+
+  const refreshRoute = useCallback(async () => {
+
     if (!origin || !destination) return;
     setIsLoading(true);
     setError(null);
@@ -141,9 +166,9 @@ export function useRouteEstimate(
     } finally {
       setIsLoading(false);
     }
-  }, [origin?.latitude, origin?.longitude, destination?.latitude, destination?.longitude]);
+  }, [origin, destination]);
 
-  useEffect(() => { fetch(); }, [fetch]);
-
-  return { route, isLoading, error, refresh: fetch };
+  return { route, isLoading, error, refresh: refreshRoute };
 }
+
+
