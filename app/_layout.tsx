@@ -15,10 +15,10 @@ import {
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { colors } from "@constants/theme";
 
-// Keep the native splash screen up until fonts are loaded AND the auth
-// session has finished restoring — this avoids any flash of the wrong
-// screen (login vs. dashboard) while `restoreSession()` resolves.
-SplashScreen.preventAutoHideAsync().catch(() => {});
+// Ensure the native OS splash screen is dismissed as soon as the JS bundle
+// mounts so the branded React Native splash screen (app/index.tsx) is shown
+// and the app never freezes on the native placeholder splash screen.
+SplashScreen.hideAsync().catch(() => {});
 
 /**
  * Redirects between the (auth) group and the (tabs) group based on session
@@ -31,17 +31,20 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
+    SplashScreen.hideAsync().catch(() => {});
     if (isBootstrapping) return;
 
     const inAuthGroup = segments[0] === "(auth)";
 
-    if (!isAuthenticated && !inAuthGroup) {
-      router.replace("/(auth)/login");
-    } else if (isAuthenticated && inAuthGroup) {
-      router.replace("/(tabs)/dashboard");
+    try {
+      if (!isAuthenticated && !inAuthGroup) {
+        router.replace("/(auth)/login");
+      } else if (isAuthenticated && inAuthGroup) {
+        router.replace("/(tabs)/dashboard");
+      }
+    } catch (err) {
+      console.warn("Navigation redirect warning:", err);
     }
-
-    SplashScreen.hideAsync().catch(() => {});
   }, [isAuthenticated, isBootstrapping, router, segments]);
 
   return <>{children}</>;
@@ -83,23 +86,20 @@ function AppShell() {
 }
 
 export default function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({
+  useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
   });
 
-  const ready = fontsLoaded || !!fontError;
-
-  const onLayout = useCallback(() => {
-    // Native splash stays up (see RouteGuard) until auth bootstrap resolves;
-    // nothing to do here beyond letting layout happen once fonts are ready.
+  useEffect(() => {
+    SplashScreen.hideAsync().catch(() => {});
   }, []);
 
-  if (!ready) {
-    return null;
-  }
+  const onLayout = useCallback(() => {
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayout}>

@@ -32,19 +32,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [pendingOtpToken, setPendingOtpToken] = useState<string | null>(null);
 
   useEffect(() => {
-    (async () => {
-      const restored = await authService.restoreSession();
-      setToken(restored.token);
-      setDriver(restored.driver);
-      setIsBootstrapping(false);
+    let active = true;
+    const timeout = setTimeout(() => {
+      if (active) setIsBootstrapping(false);
+    }, 3000);
 
+    (async () => {
       try {
-        const freshDriver = await authService.fetchCurrentDriver();
-        setDriver(freshDriver);
+        const restored = await authService.restoreSession();
+        if (!active) return;
+        setToken(restored.token);
+        setDriver(restored.driver);
+        setIsBootstrapping(false);
+
+        if (restored.token) {
+          try {
+            const freshDriver = await authService.fetchCurrentDriver();
+            if (active) setDriver(freshDriver);
+          } catch (err) {
+            console.warn("Failed to fetch fresh driver profile on boot:", err);
+          }
+        }
       } catch (err) {
-        console.warn("Failed to fetch fresh driver profile on boot:", err);
+        console.warn("Failed to restore session on boot:", err);
+      } finally {
+        clearTimeout(timeout);
+        if (active) setIsBootstrapping(false);
       }
     })();
+
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+    };
   }, []);
 
   useEffect(() => {
