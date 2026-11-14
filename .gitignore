@@ -13,3 +13,5 @@ npm-debug.*
 *.orig.*
 *.log
 .DS_Store
+
+/android

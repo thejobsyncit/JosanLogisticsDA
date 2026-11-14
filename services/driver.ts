@@ -7,13 +7,18 @@ export async function setDutyStatus(status: DutyStatus | "online" | "offline" | 
   try {
     const cachedDriver = await appStorage.getJSON<Driver>(STORAGE_KEYS.driverProfile);
     const driverId = cachedDriver?.id || "DRV-101";
+    const driverEmail = cachedDriver?.email || "tan.weiming@josanlogistics.com";
 
     const dbStatus = status === "offline" ? "Offline" : status === "on_break" ? "On Break" : "Available";
 
-    await supabase
+    const { error } = await supabase
       .from("drivers")
-      .update({ status: dbStatus, updated_at: new Date().toISOString() })
-      .eq("id", driverId);
+      .update({ status: dbStatus })
+      .or(`id.eq.${driverId},email.eq.${driverEmail}`);
+
+    if (error) {
+      console.warn("Supabase setDutyStatus error:", error.message);
+    }
 
     if (cachedDriver) {
       const updated: Driver = { ...cachedDriver, dutyStatus: status === "offline" ? "offline" : "online" };
@@ -94,14 +99,29 @@ export async function saveVehicleDetails(details: {
   const driverEmail = cachedDriver?.email || "tan.weiming@josanlogistics.com";
 
   try {
-    await supabase
+    const { error } = await supabase
       .from("drivers")
       .update({
         vehicle_plate: details.vehiclePlate,
+        vehicle_id: details.vehiclePlate,
+        vehicle_number: details.vehiclePlate,
+        vehicle_type: details.vehicleType,
+      })
+      .or(`id.eq.${driverId},email.eq.${driverEmail}`);
+
+    if (error) {
+      console.warn("Supabase vehicle update error:", error.message);
+    }
+
+    await supabase
+      .from("shipments")
+      .update({
+        vehicle_plate: details.vehiclePlate,
+        vehicle: details.vehiclePlate,
         vehicle_type: details.vehicleType,
         updated_at: new Date().toISOString(),
       })
-      .or(`id.eq.${driverId},email.eq.${driverEmail}`);
+      .eq("driver_id", driverId);
   } catch (e) {
     console.warn("Supabase vehicle update warning:", e);
   }
@@ -129,14 +149,29 @@ export async function deleteVehicleDetails(): Promise<void> {
   const driverEmail = cachedDriver?.email || "tan.weiming@josanlogistics.com";
 
   try {
-    await supabase
+    const { error } = await supabase
       .from("drivers")
       .update({
         vehicle_plate: null,
+        vehicle_id: null,
+        vehicle_number: null,
+        vehicle_type: null,
+      })
+      .or(`id.eq.${driverId},email.eq.${driverEmail}`);
+
+    if (error) {
+      console.warn("Supabase vehicle delete error:", error.message);
+    }
+
+    await supabase
+      .from("shipments")
+      .update({
+        vehicle_plate: null,
+        vehicle: null,
         vehicle_type: null,
         updated_at: new Date().toISOString(),
       })
-      .or(`id.eq.${driverId},email.eq.${driverEmail}`);
+      .eq("driver_id", driverId);
   } catch (e) {
     console.warn("Supabase vehicle delete warning:", e);
   }
@@ -220,66 +255,117 @@ export async function updateProfile(partialDriver: Partial<Driver>): Promise<Dri
   const driverId = cachedDriver?.id || "DRV-101";
   const driverEmail = cachedDriver?.email || "tan.weiming@josanlogistics.com";
 
-  const updateData: any = { updated_at: new Date().toISOString() };
+  let resolvedAvatarUrl = partialDriver.avatarUrl;
+  if (resolvedAvatarUrl && !resolvedAvatarUrl.startsWith("http")) {
+    try {
+      const fileName = `avatars/${driverId}_${Date.now()}.jpg`;
+      const response = await fetch(resolvedAvatarUrl);
+      const blob = await response.blob();
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("proof-of-delivery")
+        .upload(fileName, blob, { contentType: "image/jpeg", upsert: true });
+      if (!uploadError && uploadData?.path) {
+        const { data: publicUrlData } = supabase.storage.from("proof-of-delivery").getPublicUrl(uploadData.path);
+        if (publicUrlData?.publicUrl) {
+          resolvedAvatarUrl = publicUrlData.publicUrl;
+        }
+      }
+    } catch {
+      // Keep local URI if storage upload is unavailable
+    }
+  }
+
+  // Note: public.drivers does NOT have an updated_at column in the Supabase schema
+  const updateData: any = {};
   if (partialDriver.name) updateData.name = partialDriver.name;
   if (partialDriver.phone) updateData.phone = partialDriver.phone;
   if (partialDriver.email) updateData.email = partialDriver.email;
-  if (partialDriver.avatarUrl !== undefined) {
-    updateData.photo = partialDriver.avatarUrl;
+  if (partialDriver.hub) updateData.assigned_hub = partialDriver.hub;
+  if (resolvedAvatarUrl !== undefined) {
+    updateData.photo = resolvedAvatarUrl;
   }
-  if (partialDriver.vehiclePlate) {
-    updateData.vehicle_plate = partialDriver.vehiclePlate;
-    updateData.vehicle_number = partialDriver.vehiclePlate;
-    updateData.vehicle_id = partialDriver.vehiclePlate;
+  if (partialDriver.vehiclePlate !== undefined) {
+    const plateVal = partialDriver.vehiclePlate || null;
+    updateData.vehicle_plate = plateVal;
+    updateData.vehicle_number = plateVal;
+    updateData.vehicle_id = plateVal;
   }
 
-  // Update public.drivers by driver ID or email
-  const { data: updatedDriverRow, error: driverError } = await supabase
-    .from("drivers")
-    .update(updateData)
-    .or(`id.eq.${driverId},email.eq.${driverEmail}`)
-    .select()
-    .maybeSingle();
+  let updatedDriverRow: any = null;
+  if (Object.keys(updateData).length > 0) {
+    const { data, error: driverError } = await supabase
+      .from("drivers")
+      .update(updateData)
+      .eq("id", driverId)
+      .select()
+      .maybeSingle();
 
-  if (driverError) {
-    console.warn("Supabase driver update error:", driverError.message);
+    if (driverError) {
+      console.warn("Supabase driver update error:", driverError.message);
+    } else if (data) {
+      updatedDriverRow = data;
+    } else {
+      const { data: byEmailData } = await supabase
+        .from("drivers")
+        .update(updateData)
+        .eq("email", driverEmail)
+        .select()
+        .maybeSingle();
+      updatedDriverRow = byEmailData;
+    }
   }
 
   // Update public.profiles if user name/phone/email/avatarUrl changed
-  if (partialDriver.name || partialDriver.phone || partialDriver.email || partialDriver.avatarUrl !== undefined) {
+  if (partialDriver.name || partialDriver.phone || partialDriver.email || resolvedAvatarUrl !== undefined) {
     await supabase
       .from("profiles")
       .update({
         ...(partialDriver.name ? { name: partialDriver.name } : {}),
         ...(partialDriver.phone ? { phone: partialDriver.phone } : {}),
         ...(partialDriver.email ? { email: partialDriver.email } : {}),
-        ...(partialDriver.avatarUrl !== undefined ? { avatar_url: partialDriver.avatarUrl } : {}),
-        updated_at: new Date().toISOString(),
+        ...(resolvedAvatarUrl !== undefined ? { avatar_url: resolvedAvatarUrl } : {}),
       })
       .eq("email", driverEmail);
   }
 
-  // Update public.shipments for active trips assigned to this driver
-  if (partialDriver.vehiclePlate) {
+  // Update public.shipments for trips assigned to this driver
+  const shipmentUpdates: any = {};
+  if (partialDriver.name) shipmentUpdates.driver_name = partialDriver.name;
+  if (partialDriver.phone) shipmentUpdates.driver_phone = partialDriver.phone;
+  if (partialDriver.vehiclePlate !== undefined) {
+    shipmentUpdates.vehicle_plate = partialDriver.vehiclePlate || null;
+    shipmentUpdates.vehicle = partialDriver.vehiclePlate || null;
+  }
+  if (Object.keys(shipmentUpdates).length > 0) {
+    shipmentUpdates.updated_at = new Date().toISOString();
     await supabase
       .from("shipments")
-      .update({
-        vehicle_plate: partialDriver.vehiclePlate,
-        vehicle: partialDriver.vehiclePlate,
-        updated_at: new Date().toISOString(),
-      })
-      .or(`driver_id.eq.${driverId},driver_phone.eq.${cachedDriver?.phone || ""}`);
+      .update(shipmentUpdates)
+      .eq("driver_id", driverId);
+  }
+
+  if (partialDriver.vehiclePlate !== undefined) {
+    const savedVehicle = await appStorage.getJSON<any>("assigned_vehicle_details");
+    if (savedVehicle) {
+      await appStorage.setJSON("assigned_vehicle_details", {
+        ...savedVehicle,
+        vehiclePlate: partialDriver.vehiclePlate,
+        deleted: !partialDriver.vehiclePlate,
+      });
+    }
   }
 
   const merged: Driver = {
     ...(cachedDriver || ({} as Driver)),
     ...partialDriver,
+    ...(resolvedAvatarUrl !== undefined ? { avatarUrl: resolvedAvatarUrl } : {}),
     vehiclePlate:
-      updatedDriverRow?.vehicle_plate ||
-      updatedDriverRow?.vehicle_number ||
-      partialDriver.vehiclePlate ||
-      cachedDriver?.vehiclePlate ||
-      "SG-8819",
+      partialDriver.vehiclePlate !== undefined
+        ? partialDriver.vehiclePlate
+        : updatedDriverRow?.vehicle_plate ||
+          updatedDriverRow?.vehicle_number ||
+          cachedDriver?.vehiclePlate ||
+          "SG-8819",
   };
 
   await appStorage.setJSON(STORAGE_KEYS.driverProfile, merged);

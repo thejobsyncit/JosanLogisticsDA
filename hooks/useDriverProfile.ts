@@ -83,6 +83,10 @@ export function useDutyStatusToggle(initial: DutyStatus, onChange: (status: Duty
   const [status, setStatus] = useState<DutyStatus>(initial);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    setStatus(initial);
+  }, [initial]);
+
   const toggle = useCallback(async () => {
     const next: DutyStatus = status === "online" ? "offline" : "online";
     setLoading(true);

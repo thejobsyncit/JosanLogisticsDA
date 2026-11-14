@@ -5,7 +5,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/theme";
 import { Header } from "@/components/Header";
-import { api } from "@/services/api";
+import { reportFailedDelivery } from "@/services/trips";
 
 const EXCEPTION_REASONS = [
   "Customer unavailable",
@@ -41,10 +41,11 @@ export default function ExceptionReportScreen() {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      await api.post(`/trips/${id}/exception`, {
-        reason: selectedReason,
-        notes: notes.trim() || undefined,
-        photoUrl: photoUri || undefined,
+      await reportFailedDelivery({
+        tripId: id || "",
+        reason: "other",
+        notes: `${selectedReason}${notes.trim() ? `: ${notes.trim()}` : ""}`,
+        photoUri: photoUri || undefined,
       });
       alert("Delivery exception reported to dispatcher.");
       router.back();

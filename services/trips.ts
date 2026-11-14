@@ -98,9 +98,25 @@ export async function getTripById(id: string): Promise<Trip> {
 }
 
 export async function acceptTrip(id: string): Promise<Trip> {
+  const cachedDriver = await appStorage.getJSON<Driver>(STORAGE_KEYS.driverProfile);
+  const driverId = cachedDriver?.id || "DRV-101";
+
+  const updateFields: Record<string, any> = {
+    status: TripStatus.Accepted,
+    driver_id: driverId,
+    last_updated_time: "Just now",
+    updated_at: new Date().toISOString(),
+  };
+  if (cachedDriver?.name) updateFields.driver_name = cachedDriver.name;
+  if (cachedDriver?.phone) updateFields.driver_phone = cachedDriver.phone;
+  if (cachedDriver?.vehiclePlate) {
+    updateFields.vehicle_plate = cachedDriver.vehiclePlate;
+    updateFields.vehicle = cachedDriver.vehiclePlate;
+  }
+
   const { data: updated, error } = await supabase
     .from("shipments")
-    .update({ status: TripStatus.Accepted, updated_at: new Date().toISOString() })
+    .update(updateFields)
     .eq("id", id)
     .select()
     .single();
@@ -109,26 +125,35 @@ export async function acceptTrip(id: string): Promise<Trip> {
     throw new Error(`Failed to accept trip ${id}: ${error?.message || "Unknown error"}`);
   }
 
+  await supabase.from("drivers").update({ status: "On Delivery" }).eq("id", driverId);
+
   return mapDbShipmentToTrip(updated);
 }
 
 export async function rejectTrip(id: string, reason: string, notes?: string): Promise<void> {
   await supabase
     .from("shipments")
-    .update({ status: TripStatus.Cancelled, updated_at: new Date().toISOString() })
+    .update({ status: TripStatus.Cancelled, last_updated_time: "Just now", updated_at: new Date().toISOString() })
     .eq("id", id);
 }
 
 export async function advanceTripStatus(id: string, nextStatus: TripStatus): Promise<Trip> {
+  const driverId = await getCurrentDriverId();
   const { data: updated, error } = await supabase
     .from("shipments")
-    .update({ status: nextStatus, updated_at: new Date().toISOString() })
+    .update({ status: nextStatus, last_updated_time: "Just now", updated_at: new Date().toISOString() })
     .eq("id", id)
     .select()
     .single();
 
   if (error || !updated) {
     throw new Error(`Failed to update trip status to ${nextStatus}: ${error?.message}`);
+  }
+
+  if (nextStatus === TripStatus.DeliveryCompleted) {
+    await supabase.from("drivers").update({ status: "Available" }).eq("id", driverId);
+  } else {
+    await supabase.from("drivers").update({ status: "On Delivery" }).eq("id", driverId);
   }
 
   return mapDbShipmentToTrip(updated);

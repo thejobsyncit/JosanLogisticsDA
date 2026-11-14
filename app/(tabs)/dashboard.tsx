@@ -24,11 +24,13 @@ import { StatTile } from "@/components/dashboard/StatTile";
 export default function DashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { driver } = useAuth();
+  const { driver, updateDutyStatus } = useAuth();
   const { data, isLoading, error, refresh } = useDashboard();
   const [refreshing, setRefreshing] = useState(false);
 
-  const { status, loading: statusLoading, toggle } = useDutyStatusToggle(driver?.dutyStatus ?? "offline", () => {});
+  const { status, loading: statusLoading, toggle } = useDutyStatusToggle(driver?.dutyStatus ?? "offline", (next) => {
+    updateDutyStatus(next);
+  });
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

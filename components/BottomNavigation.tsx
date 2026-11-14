@@ -21,13 +21,16 @@ const LABELS: Record<string, string> = {
 export interface BottomNavigationProps {
   state: any;
   descriptors?: any;
-  navigation: any;
+  navigation?: any;
+  emitter?: any;
+  navigateToTab?: (routeKey: string) => void;
+  insets?: any;
 }
 
 /**
  * Custom bottom tab navigation bar — redesigned for Josan Logistics Driver App.
  */
-export function BottomNavigation({ state, navigation }: BottomNavigationProps) {
+export function BottomNavigation({ state, navigation, emitter, navigateToTab }: BottomNavigationProps) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -40,9 +43,14 @@ export function BottomNavigation({ state, navigation }: BottomNavigationProps) {
         const color = isFocused ? colors.primary : colors.textMuted;
 
         const onPress = () => {
-          const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
-          if (!isFocused && !event.defaultPrevented) {
-            navigation.navigate(route.name);
+          const eventEmitter = emitter ?? navigation;
+          const event = eventEmitter?.emit?.({ type: "tabPress", target: route.key, canPreventDefault: true });
+          if (!isFocused && !event?.defaultPrevented) {
+            if (navigateToTab) {
+              navigateToTab(route.key);
+            } else if (navigation?.navigate) {
+              navigation.navigate(route.name, route.params);
+            }
           }
         };
 
