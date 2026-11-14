@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors, spacing, typography } from "@constants/theme";
 import { useAuth } from "@/hooks/useAuth";
@@ -13,6 +14,7 @@ export default function SplashScreenRoute() {
   const router = useRouter();
 
   useEffect(() => {
+    SplashScreen.hideAsync().catch(() => {});
     if (isBootstrapping) return;
     if (isAuthenticated) {
       router.replace("/(tabs)/dashboard");
