@@ -1,22 +1,39 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 import React from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE, UrlTile, MapViewProps } from "react-native-maps";
 import { config } from "@constants/config";
 import { colors, spacing, typography } from "@constants/theme";
 
-export { Marker, Polyline, PROVIDER_GOOGLE, UrlTile };
+const hasKey = !!(
+  config.googleMapsApiKey &&
+  config.googleMapsApiKey !== "YOUR_ANDROID_GOOGLE_MAPS_API_KEY"
+);
 
-export interface SmartMapViewProps extends MapViewProps {
+let rnMaps: any = null;
+if (Platform.OS !== "android" || hasKey) {
+  try {
+    rnMaps = require("react-native-maps");
+  } catch {
+    rnMaps = null;
+  }
+}
+
+export const PROVIDER_GOOGLE = rnMaps?.PROVIDER_GOOGLE ?? "google";
+export const Marker = rnMaps?.Marker ?? (() => null);
+export const Polyline = rnMaps?.Polyline ?? (() => null);
+export const UrlTile = rnMaps?.UrlTile ?? (() => null);
+
+export interface SmartMapViewProps {
   useOneMapTiles?: boolean;
+  style?: any;
+  children?: React.ReactNode;
+  [key: string]: any;
 }
 
 export default function SmartMapView({ useOneMapTiles, children, style, ...props }: SmartMapViewProps) {
-  const hasKey = !!(
-    config.googleMapsApiKey &&
-    config.googleMapsApiKey !== "YOUR_ANDROID_GOOGLE_MAPS_API_KEY"
-  );
+  const MapViewComponent = rnMaps?.default;
 
-  if (Platform.OS === "android" && !hasKey) {
+  if (!MapViewComponent || (Platform.OS === "android" && !hasKey)) {
     return (
       <View style={[styles.fallbackContainer, style]}>
         <View style={styles.fallbackContent}>
@@ -31,7 +48,7 @@ export default function SmartMapView({ useOneMapTiles, children, style, ...props
   }
 
   return (
-    <MapView
+    <MapViewComponent
       style={style}
       {...props}
       provider={hasKey ? props.provider : undefined}
@@ -44,7 +61,7 @@ export default function SmartMapView({ useOneMapTiles, children, style, ...props
         />
       ) : null}
       {children}
-    </MapView>
+    </MapViewComponent>
   );
 }
 

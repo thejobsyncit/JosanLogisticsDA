@@ -31,8 +31,12 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
+    try {
+      SplashScreen.hide();
+    } catch {}
     SplashScreen.hideAsync().catch(() => {});
     if (isBootstrapping) return;
+    if (segments.length === 0) return;
 
     const inAuthGroup = segments[0] === "(auth)";
 

@@ -46,6 +46,7 @@
       }
     },
     "plugins": [
+      "./plugins/withFixSplashScreen.js",
       "expo-router",
       "expo-secure-store",
       "expo-font",
