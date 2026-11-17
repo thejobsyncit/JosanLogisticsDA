@@ -1,26 +1,41 @@
 import React, { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Redirect } from "expo-router";
+import { useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors, spacing, typography } from "@constants/theme";
 import { useAuth } from "@/hooks/useAuth";
+import LoginScreen from "./(auth)/login";
+import DashboardScreen from "./(tabs)/dashboard";
 
 /**
- * Branded splash screen component with fallback navigation redirect.
+ * Branded splash screen component with direct fallback rendering so the root
+ * screen never renders null while navigation transitions.
  */
 export default function SplashScreenRoute() {
   const { isAuthenticated, isBootstrapping } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     try {
       SplashScreen.hide();
     } catch {}
     SplashScreen.hideAsync().catch(() => {});
-  }, []);
+
+    if (isBootstrapping) return;
+    try {
+      if (isAuthenticated) {
+        router.replace("/(tabs)/dashboard");
+      } else {
+        router.replace("/(auth)/login");
+      }
+    } catch (err) {
+      console.warn("Splash redirect warning:", err);
+    }
+  }, [isAuthenticated, isBootstrapping, router]);
 
   if (!isBootstrapping) {
-    return <Redirect href={isAuthenticated ? "/(tabs)/dashboard" : "/(auth)/login"} />;
+    return isAuthenticated ? <DashboardScreen /> : <LoginScreen />;
   }
 
   return (

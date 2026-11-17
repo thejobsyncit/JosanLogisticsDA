@@ -1,4 +1,4 @@
-const { withMainActivity, withAndroidStyles } = require("expo/config-plugins");
+const { withMainActivity, withAndroidManifest } = require("expo/config-plugins");
 
 /**
  * Prevents Android 12+ SplashScreenManager OnPreDrawListener / ExitAnimationListener
@@ -8,9 +8,6 @@ module.exports = function withFixSplashScreen(config) {
   config = withMainActivity(config, (modConfig) => {
     let contents = modConfig.modResults.contents;
 
-    // Remove SplashScreenManager.registerOnActivity(this) which installs an
-    // OnPreDrawListener that can stay locked on Android standalone builds,
-    // and restore setTheme(R.style.AppTheme) before super.onCreate(null).
     contents = contents.replace(
       /\/\/\s*setTheme\(R\.style\.AppTheme\);?/g,
       "setTheme(R.style.AppTheme)"
@@ -24,13 +21,16 @@ module.exports = function withFixSplashScreen(config) {
     return modConfig;
   });
 
-  config = withAndroidStyles(config, (modConfig) => {
-    const styles = modConfig.modResults?.resources?.style || [];
-    for (const style of styles) {
-      if (style.$?.name === "Theme.App.SplashScreen") {
-        // Use AppTheme directly as parent so Android 12+ SplashScreen API
-        // never holds an exit animation lock over the React Native root view.
-        style.$.parent = "AppTheme";
+  config = withAndroidManifest(config, (modConfig) => {
+    const app = modConfig.modResults?.manifest?.application?.[0];
+    if (app?.activity) {
+      for (const act of app.activity) {
+        if (
+          act.$?.["android:name"] === ".MainActivity" ||
+          act.$?.["android:name"]?.endsWith(".MainActivity")
+        ) {
+          act.$["android:theme"] = "@style/AppTheme";
+        }
       }
     }
     return modConfig;
@@ -38,4 +38,3 @@ module.exports = function withFixSplashScreen(config) {
 
   return config;
 };
-

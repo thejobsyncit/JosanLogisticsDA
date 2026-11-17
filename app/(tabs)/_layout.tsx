@@ -6,6 +6,7 @@ import { BottomNavigation } from "@/components/BottomNavigation";
 export default function TabsLayout() {
   return (
     <Tabs
+      detachInactiveScreens={false}
       tabBar={(props) => <BottomNavigation {...props} />}
       screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.background } }}
     >

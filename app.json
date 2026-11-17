@@ -75,7 +75,8 @@
     ],
     "extra": {
       "router": {
-        "origin": false
+        "origin": false,
+        "disableSynchronousScreensUpdates": true
       },
       "eas": {
         "projectId": "26c1650b-39b9-49e7-b08b-9bffaaf9402f"
