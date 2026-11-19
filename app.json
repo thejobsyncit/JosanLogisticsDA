@@ -28,6 +28,7 @@
     },
     "android": {
       "package": "com.josanlogistics.driver",
+      "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#FFFFFF"

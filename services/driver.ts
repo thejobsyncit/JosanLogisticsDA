@@ -65,10 +65,10 @@ export async function getVehicle(): Promise<any> {
     savedDetails?.vehiclePlate !== undefined
       ? savedDetails.vehiclePlate
       : driverRow?.vehicle_plate ||
-        driverRow?.vehicle_number ||
-        driverRow?.vehicle_id ||
-        cachedDriver?.vehiclePlate ||
-        "SG-8819";
+      driverRow?.vehicle_number ||
+      driverRow?.vehicle_id ||
+      cachedDriver?.vehiclePlate ||
+      "SG-8819";
 
   if (!vehiclePlate) {
     return null;
@@ -77,6 +77,7 @@ export async function getVehicle(): Promise<any> {
   return {
     vehiclePlate,
     vehicleType: savedDetails?.vehicleType || driverRow?.vehicle_type || "Josan EV Express Cargo Truck",
+    licenseNumber: savedDetails?.licenseNumber !== undefined ? savedDetails.licenseNumber : driverRow?.license_number || "",
     capacityKg: savedDetails?.capacityKg !== undefined ? savedDetails.capacityKg : 14000,
     odometerKm: savedDetails?.odometerKm !== undefined ? savedDetails.odometerKm : 45200,
     insuranceExpiry: savedDetails?.insuranceExpiry || "2027-04-30",
@@ -88,6 +89,7 @@ export async function getVehicle(): Promise<any> {
 export async function saveVehicleDetails(details: {
   vehiclePlate: string;
   vehicleType: string;
+  licenseNumber?: string;
   capacityKg?: number;
   odometerKm?: number;
   insuranceExpiry?: string;
@@ -99,14 +101,19 @@ export async function saveVehicleDetails(details: {
   const driverEmail = cachedDriver?.email || "tan.weiming@josanlogistics.com";
 
   try {
+    const updatePayload: any = {
+      vehicle_plate: details.vehiclePlate,
+      vehicle_id: details.vehiclePlate,
+      vehicle_number: details.vehiclePlate,
+      vehicle_type: details.vehicleType,
+    };
+    if (details.licenseNumber !== undefined) {
+      updatePayload.license_number = details.licenseNumber;
+    }
+
     const { error } = await supabase
       .from("drivers")
-      .update({
-        vehicle_plate: details.vehiclePlate,
-        vehicle_id: details.vehiclePlate,
-        vehicle_number: details.vehiclePlate,
-        vehicle_type: details.vehicleType,
-      })
+      .update(updatePayload)
       .or(`id.eq.${driverId},email.eq.${driverEmail}`);
 
     if (error) {
@@ -156,6 +163,7 @@ export async function deleteVehicleDetails(): Promise<void> {
         vehicle_id: null,
         vehicle_number: null,
         vehicle_type: null,
+        license_number: null,
       })
       .or(`id.eq.${driverId},email.eq.${driverEmail}`);
 
@@ -176,7 +184,12 @@ export async function deleteVehicleDetails(): Promise<void> {
     console.warn("Supabase vehicle delete warning:", e);
   }
 
-  await appStorage.setJSON("assigned_vehicle_details", { deleted: true, vehiclePlate: "", vehicleType: "" });
+  await appStorage.setJSON("assigned_vehicle_details", {
+    deleted: true,
+    vehiclePlate: "",
+    vehicleType: "",
+    licenseNumber: "",
+  });
 
   if (cachedDriver) {
     await appStorage.setJSON(STORAGE_KEYS.driverProfile, {
@@ -285,10 +298,14 @@ export async function updateProfile(partialDriver: Partial<Driver>): Promise<Dri
     updateData.photo = resolvedAvatarUrl;
   }
   if (partialDriver.vehiclePlate !== undefined) {
-    const plateVal = partialDriver.vehiclePlate || null;
+    const plateVal = partialDriver.vehiclePlate ? partialDriver.vehiclePlate.trim() : null;
     updateData.vehicle_plate = plateVal;
     updateData.vehicle_number = plateVal;
     updateData.vehicle_id = plateVal;
+    if (!plateVal) {
+      updateData.vehicle_type = null;
+      updateData.license_number = null;
+    }
   }
 
   let updatedDriverRow: any = null;
@@ -335,6 +352,9 @@ export async function updateProfile(partialDriver: Partial<Driver>): Promise<Dri
   if (partialDriver.vehiclePlate !== undefined) {
     shipmentUpdates.vehicle_plate = partialDriver.vehiclePlate || null;
     shipmentUpdates.vehicle = partialDriver.vehiclePlate || null;
+    if (!partialDriver.vehiclePlate) {
+      shipmentUpdates.vehicle_type = null;
+    }
   }
   if (Object.keys(shipmentUpdates).length > 0) {
     shipmentUpdates.updated_at = new Date().toISOString();
@@ -351,6 +371,7 @@ export async function updateProfile(partialDriver: Partial<Driver>): Promise<Dri
         ...savedVehicle,
         vehiclePlate: partialDriver.vehiclePlate,
         deleted: !partialDriver.vehiclePlate,
+        licenseNumber: partialDriver.vehiclePlate ? savedVehicle.licenseNumber : "",
       });
     }
   }
@@ -363,9 +384,9 @@ export async function updateProfile(partialDriver: Partial<Driver>): Promise<Dri
       partialDriver.vehiclePlate !== undefined
         ? partialDriver.vehiclePlate
         : updatedDriverRow?.vehicle_plate ||
-          updatedDriverRow?.vehicle_number ||
-          cachedDriver?.vehiclePlate ||
-          "SG-8819",
+        updatedDriverRow?.vehicle_number ||
+        cachedDriver?.vehiclePlate ||
+        "SG-8819",
   };
 
   await appStorage.setJSON(STORAGE_KEYS.driverProfile, merged);

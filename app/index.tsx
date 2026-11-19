@@ -19,8 +19,8 @@ export default function SplashScreenRoute() {
   useEffect(() => {
     try {
       SplashScreen.hide();
-    } catch {}
-    SplashScreen.hideAsync().catch(() => {});
+    } catch { }
+    SplashScreen.hideAsync().catch(() => { });
 
     if (isBootstrapping) return;
     try {

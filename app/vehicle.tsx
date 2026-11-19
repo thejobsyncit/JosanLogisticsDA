@@ -35,6 +35,7 @@ export default function VehicleScreen() {
   // Form Fields
   const [plate, setPlate] = useState("");
   const [model, setModel] = useState("");
+  const [licenseNumber, setLicenseNumber] = useState("");
   const [capacity, setCapacity] = useState("");
   const [odometer, setOdometer] = useState("");
   const [insurance, setInsurance] = useState("");
@@ -61,6 +62,7 @@ export default function VehicleScreen() {
     setIsEditing(false);
     setPlate("");
     setModel("");
+    setLicenseNumber("");
     setCapacity("14000");
     setOdometer("45200");
     setInsurance("2027-04-30");
@@ -75,6 +77,7 @@ export default function VehicleScreen() {
     setIsEditing(true);
     setPlate(vehicle.vehiclePlate || "");
     setModel(vehicle.vehicleType || "");
+    setLicenseNumber(vehicle.licenseNumber || "");
     setCapacity(vehicle.capacityKg ? String(vehicle.capacityKg) : "14000");
     setOdometer(vehicle.odometerKm ? String(vehicle.odometerKm) : "45200");
     setInsurance(vehicle.insuranceExpiry || "2027-04-30");
@@ -98,6 +101,7 @@ export default function VehicleScreen() {
       const updatedData = {
         vehiclePlate: plate.trim().toUpperCase(),
         vehicleType: model.trim(),
+        licenseNumber: licenseNumber.trim(),
         capacityKg: capacity ? parseInt(capacity, 10) : 14000,
         odometerKm: odometer ? parseInt(odometer, 10) : 45200,
         insuranceExpiry: insurance.trim() || "2027-04-30",
@@ -202,6 +206,9 @@ export default function VehicleScreen() {
             <View style={styles.sectionCard}>
               <Text style={styles.sectionTitle}>Specifications</Text>
               <DetailRow label="Vehicle Type" value={vehicle.vehicleType} />
+              {vehicle.licenseNumber ? (
+                <DetailRow label="License Number" value={vehicle.licenseNumber} />
+              ) : null}
               <DetailRow label="Cargo Capacity" value={`${vehicle.capacityKg || 14000} kg`} />
               <DetailRow label="Current Odometer" value={`${vehicle.odometerKm || 45200} km`} />
             </View>
@@ -272,6 +279,14 @@ export default function VehicleScreen() {
                 }}
                 placeholder="e.g. Josan EV Express Cargo Truck"
                 error={errors.model}
+              />
+
+              <TextField
+                label="License Number"
+                value={licenseNumber}
+                onChangeText={setLicenseNumber}
+                autoCapitalize="characters"
+                placeholder="e.g. SG-CLASS4-9910"
               />
 
               <TextField

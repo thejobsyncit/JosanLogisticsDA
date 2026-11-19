@@ -17,6 +17,9 @@ npm-debug.*
 .DS_Store
 /android
 *.apk
+dist-debug/
+dist-test/
 package-lock.backup.json
 package-lock.old.json
 package.backup.json
+

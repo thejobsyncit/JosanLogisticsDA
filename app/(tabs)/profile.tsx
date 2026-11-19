@@ -98,7 +98,7 @@ export default function ProfileScreen() {
       if (!result.canceled && result.assets && result.assets[0]) {
         const newUri = result.assets[0].uri;
         setEditAvatarUrl(newUri);
-        
+
         // Save immediately to backend & state
         setIsUploadingPhoto(true);
         await updateProfile({ avatarUrl: newUri });
@@ -140,7 +140,7 @@ export default function ProfileScreen() {
         name: editName.trim(),
         phone: editPhone.trim(),
         email: editEmail.trim(),
-        vehiclePlate: editVehiclePlate.trim() || undefined,
+        vehiclePlate: editVehiclePlate.trim(),
         avatarUrl: editAvatarUrl,
       });
       setIsEditingProfile(false);

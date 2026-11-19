@@ -16,7 +16,7 @@ import {
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { colors } from "@constants/theme";
 
-SplashScreen.hideAsync().catch(() => {});
+SplashScreen.hideAsync().catch(() => { });
 
 const win = Dimensions.get("window");
 const fallbackInitialMetrics = initialWindowMetrics ?? {
@@ -37,8 +37,8 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       SplashScreen.hide();
-    } catch {}
-    SplashScreen.hideAsync().catch(() => {});
+    } catch { }
+    SplashScreen.hideAsync().catch(() => { });
     if (isBootstrapping) return;
 
     const inAuthGroup = segments[0] === "(auth)";
@@ -79,15 +79,15 @@ export default function RootLayout() {
   useEffect(() => {
     try {
       SplashScreen.hide();
-    } catch {}
-    SplashScreen.hideAsync().catch(() => {});
+    } catch { }
+    SplashScreen.hideAsync().catch(() => { });
   }, []);
 
   const onLayout = useCallback(() => {
     try {
       SplashScreen.hide();
-    } catch {}
-    SplashScreen.hideAsync().catch(() => {});
+    } catch { }
+    SplashScreen.hideAsync().catch(() => { });
   }, []);
 
   return (

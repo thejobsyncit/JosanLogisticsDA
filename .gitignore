@@ -16,3 +16,6 @@ npm-debug.*
 
 /android
 *.apk
+dist-debug/
+dist-test/
+
