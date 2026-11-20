@@ -1,17 +1,17 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
-import { DeliveryBikeAnimation, JOSAN_ORANGE } from "./DeliveryBikeAnimation";
+import { JOSAN_ORANGE } from "./DeliveryBikeAnimation";
+import { SportBikeAnimation } from "./SportBikeAnimation";
 
 interface MotorcycleLoaderProps {
   text?: string;
 }
 
 /**
- * Compact Motorcycle Loader for Login Screen.
- * Shares the exact same delivery motorcycle animation asset as the splash screen.
+ * Compact sport-bike loader for the login screen.
  */
 export function MotorcycleLoader({ text = "Signing in..." }: MotorcycleLoaderProps) {
-  const pulseAnim = useRef(new Animated.Value(0.7)).current;
+  const [pulseAnim] = useState(() => new Animated.Value(0.7));
 
   useEffect(() => {
     const textPulse = Animated.loop(
@@ -40,10 +40,11 @@ export function MotorcycleLoader({ text = "Signing in..." }: MotorcycleLoaderPro
 
   return (
     <View style={styles.container} accessibilityRole="progressbar" accessibilityLabel={text}>
-      <DeliveryBikeAnimation scale={0.92} showRoad={true} showSpeedLines={true} />
+      <SportBikeAnimation />
 
       {/* Subtly Pulsing "Signing in..." Text */}
       <Animated.Text
+        accessibilityLiveRegion="polite"
         style={[
           styles.statusText,
           {

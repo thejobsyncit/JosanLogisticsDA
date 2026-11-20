@@ -24,6 +24,7 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
 
   // Rate-limiting / Temporary Cooldown state
   const [failedAttempts, setFailedAttempts] = useState(0);
@@ -68,7 +69,7 @@ export default function LoginScreen() {
   };
 
   const onSubmit = async () => {
-    if (submitting) return;
+    if (submitLockRef.current || submitting) return;
 
     // Check temporary cooldown lock
     if (cooldownSeconds > 0) {
@@ -84,6 +85,7 @@ export default function LoginScreen() {
 
     if (!validate()) return;
 
+    submitLockRef.current = true;
     setSubmitting(true);
     try {
       // Email is trimmed and lowercased; password is NOT trimmed or altered
@@ -113,6 +115,7 @@ export default function LoginScreen() {
         setCooldownSeconds(COOLDOWN_DURATION_SECONDS);
       }
     } finally {
+      submitLockRef.current = false;
       setSubmitting(false);
     }
   };
