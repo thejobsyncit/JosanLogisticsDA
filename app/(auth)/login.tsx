@@ -1,54 +1,124 @@
-import React, { useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography } from "@constants/theme";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiRequestError } from "@/types/api";
 import { TextField } from "@/components/TextField";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { LoginErrorModal } from "@/components/LoginErrorModal";
+import { MotorcycleLoader } from "@/components/MotorcycleLoader";
+import { classifyLoginError, LoginErrorInfo, LOGIN_ERROR_SCENARIOS } from "@/utils/loginError";
 
-/** Driver Login screen — employee ID / phone + password, per requirement #4. */
+const MAX_FAILED_ATTEMPTS_BEFORE_COOLDOWN = 5;
+const COOLDOWN_DURATION_SECONDS = 30;
+
+/** Driver Login screen — secure email & password via Supabase Auth */
 export default function LoginScreen() {
   const router = useRouter();
   const { login } = useAuth();
 
-  const [employeeIdOrPhone, setEmployeeIdOrPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Rate-limiting / Temporary Cooldown state
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const cooldownTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Unified Error Modal state
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [activeError, setActiveError] = useState<LoginErrorInfo | null>(null);
+
+  // Cooldown countdown timer effect
+  useEffect(() => {
+    if (cooldownSeconds > 0) {
+      cooldownTimerRef.current = setTimeout(() => {
+        setCooldownSeconds((prev) => prev - 1);
+      }, 1000);
+    } else if (cooldownSeconds === 0 && failedAttempts >= MAX_FAILED_ATTEMPTS_BEFORE_COOLDOWN) {
+      setFailedAttempts(0);
+    }
+    return () => {
+      if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
+    };
+  }, [cooldownSeconds, failedAttempts]);
 
   const validate = () => {
     const errors: Record<string, string> = {};
-    if (!employeeIdOrPhone.trim()) errors.employeeIdOrPhone = "Enter your employee ID or phone number.";
-    if (!password) errors.password = "Enter your password.";
+    const trimmed = email.trim();
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+    if (!trimmed) {
+      errors.email = "Please enter your driver email address.";
+    } else if (!emailPattern.test(trimmed)) {
+      errors.email = "Please enter a valid email address (e.g. driver@josanlogistics.com).";
+    }
+
+    if (!password) {
+      errors.password = "Please enter your password.";
+    }
+
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
   const onSubmit = async () => {
-    setFormError(null);
+    if (submitting) return;
+
+    // Check temporary cooldown lock
+    if (cooldownSeconds > 0) {
+      setActiveError({
+        category: "TOO_MANY_ATTEMPTS",
+        title: "Too Many Attempts",
+        message: `Too many failed login attempts. Please wait ${cooldownSeconds} seconds before trying again.`,
+        canRetry: false,
+      });
+      setErrorModalVisible(true);
+      return;
+    }
+
     if (!validate()) return;
 
     setSubmitting(true);
     try {
-      const result = await login({ employeeIdOrPhone: employeeIdOrPhone.trim(), password });
+      // Email is trimmed and lowercased; password is NOT trimmed or altered
+      const sanitizedEmail = email.trim().toLowerCase();
+      const result = await login({ email: sanitizedEmail, password });
+
+      // Reset failure counter on success
+      setFailedAttempts(0);
+
       if (result.requiresOtp) {
         router.push("/(auth)/otp");
       }
-      // If no OTP is required, AuthProvider's token update flips
-      // isAuthenticated and the root RouteGuard redirects to the dashboard.
-    } catch (err) {
-      if (err instanceof ApiRequestError) {
-        setFieldErrors(err.fieldErrors ?? {});
-        setFormError(err.message);
-      } else {
-        setFormError("Unable to sign in. Check your connection and try again.");
+    } catch (err: any) {
+      if (err instanceof ApiRequestError && err.fieldErrors && Object.keys(err.fieldErrors).length > 0) {
+        setFieldErrors(err.fieldErrors);
+      }
+
+      const classified = classifyLoginError(err);
+      setActiveError(classified);
+      setErrorModalVisible(true);
+
+      // Track failed attempts for client-side cooldown protection
+      const nextFailures = failedAttempts + 1;
+      setFailedAttempts(nextFailures);
+
+      if (classified.category === "TOO_MANY_ATTEMPTS" || nextFailures >= MAX_FAILED_ATTEMPTS_BEFORE_COOLDOWN) {
+        setCooldownSeconds(COOLDOWN_DURATION_SECONDS);
       }
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleDismissError = () => {
+    setErrorModalVisible(false);
   };
 
   return (
@@ -61,20 +131,21 @@ export default function LoginScreen() {
           <MaterialCommunityIcons name="truck-fast" size={36} color={colors.white} />
         </View>
         <Text style={styles.title}>JOSAN LOGISTICS</Text>
-        <Text style={styles.subtitle}>Sign in to start your shift</Text>
+        <Text style={styles.subtitle}>Sign in with your driver email</Text>
 
         <View style={styles.form}>
           <TextField
-            label="Employee ID or Phone"
-            value={employeeIdOrPhone}
+            label="Driver Email"
+            value={email}
             onChangeText={(text) => {
-              setEmployeeIdOrPhone(text);
-              if (fieldErrors.employeeIdOrPhone) setFieldErrors((prev) => ({ ...prev, employeeIdOrPhone: "" }));
+              setEmail(text);
+              if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: "" }));
             }}
+            placeholder="driver@josanlogistics.com"
             autoCapitalize="none"
             autoCorrect={false}
-            keyboardType="default"
-            error={fieldErrors.employeeIdOrPhone}
+            keyboardType="email-address"
+            error={fieldErrors.email}
             returnKeyType="next"
           />
           <TextField
@@ -84,20 +155,63 @@ export default function LoginScreen() {
               setPassword(text);
               if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: "" }));
             }}
-            secureTextEntry
+            placeholder="••••••••"
+            secureTextEntry={!showPassword}
             autoCapitalize="none"
+            autoCorrect={false}
             error={fieldErrors.password}
             returnKeyType="done"
             onSubmitEditing={onSubmit}
+            rightAccessory={
+              <Pressable
+                onPress={() => setShowPassword((prev) => !prev)}
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                style={styles.eyeButton}
+              >
+                <Ionicons
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={22}
+                  color={colors.textSecondary}
+                />
+              </Pressable>
+            }
           />
 
-          {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+          {/* Animated Motorcycle Delivery Motion Loader */}
+          {submitting ? (
+            <View style={styles.loaderArea}>
+              <MotorcycleLoader text="Signing in..." />
+            </View>
+          ) : null}
 
-          <PrimaryButton label="Sign In" onPress={onSubmit} loading={submitting} style={styles.submit} />
+          {/* Cooldown notification */}
+          {cooldownSeconds > 0 ? (
+            <Text style={styles.cooldownNotice}>
+              Please wait {cooldownSeconds}s before attempting to sign in again.
+            </Text>
+          ) : null}
+
+          <PrimaryButton
+            label={cooldownSeconds > 0 ? `Wait (${cooldownSeconds}s)` : "Sign In"}
+            onPress={onSubmit}
+            disabled={submitting || cooldownSeconds > 0}
+            loading={false}
+            style={styles.submit}
+          />
         </View>
 
         <Text style={styles.footer}>Having trouble signing in? Contact your dispatch supervisor.</Text>
       </ScrollView>
+
+      {/* Unified Josan Logistics Error Popup System with Retry Support */}
+      <LoginErrorModal
+        visible={errorModalVisible}
+        error={activeError}
+        onDismiss={handleDismissError}
+        onRetry={onSubmit}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -106,9 +220,13 @@ const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background },
   content: {
     flexGrow: 1,
+    width: "100%",
+    maxWidth: 480,
+    alignSelf: "center",
     alignItems: "center",
-    padding: spacing.xl,
+    paddingHorizontal: spacing.xl,
     paddingTop: spacing.xxl * 2,
+    paddingBottom: spacing.xxl,
     gap: spacing.xs,
   },
   markWrap: {
@@ -139,10 +257,22 @@ const styles = StyleSheet.create({
   submit: {
     marginTop: spacing.xs,
   },
-  formError: {
+  loaderArea: {
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    marginVertical: spacing.xs,
+  },
+  eyeButton: {
+    padding: spacing.xs,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cooldownNotice: {
+    fontSize: typography.caption.fontSize,
     color: colors.error,
-    fontSize: typography.bodySmall.fontSize,
     textAlign: "center",
+    marginVertical: spacing.xs,
   },
   footer: {
     marginTop: spacing.xxl,

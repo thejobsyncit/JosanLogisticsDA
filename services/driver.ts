@@ -6,8 +6,11 @@ import type { DutyStatus, DriverPerformance, DriverDocument, Driver } from "@/ty
 export async function setDutyStatus(status: DutyStatus | "online" | "offline" | "on_break"): Promise<any> {
   try {
     const cachedDriver = await appStorage.getJSON<Driver>(STORAGE_KEYS.driverProfile);
-    const driverId = cachedDriver?.id || "DRV-101";
-    const driverEmail = cachedDriver?.email || "tan.weiming@josanlogistics.com";
+    if (!cachedDriver?.id) {
+      return { status };
+    }
+    const driverId = cachedDriver.id;
+    const driverEmail = cachedDriver.email;
 
     const dbStatus = status === "offline" ? "Offline" : status === "on_break" ? "On Break" : "Available";
 
@@ -46,8 +49,11 @@ export async function getEarnings(): Promise<{ todayEarnings: number; weekEarnin
 
 export async function getVehicle(): Promise<any> {
   const cachedDriver = await appStorage.getJSON<Driver>(STORAGE_KEYS.driverProfile);
-  const driverId = cachedDriver?.id || "DRV-101";
-  const driverEmail = cachedDriver?.email || "tan.weiming@josanlogistics.com";
+  if (!cachedDriver?.id && !cachedDriver?.email) {
+    return null;
+  }
+  const driverId = cachedDriver?.id;
+  const driverEmail = cachedDriver?.email;
 
   const { data: driverRow } = await supabase
     .from("drivers")
@@ -68,7 +74,7 @@ export async function getVehicle(): Promise<any> {
       driverRow?.vehicle_number ||
       driverRow?.vehicle_id ||
       cachedDriver?.vehiclePlate ||
-      "SG-8819";
+      "";
 
   if (!vehiclePlate) {
     return null;
@@ -76,12 +82,12 @@ export async function getVehicle(): Promise<any> {
 
   return {
     vehiclePlate,
-    vehicleType: savedDetails?.vehicleType || driverRow?.vehicle_type || "Josan EV Express Cargo Truck",
+    vehicleType: savedDetails?.vehicleType || driverRow?.vehicle_type || "",
     licenseNumber: savedDetails?.licenseNumber !== undefined ? savedDetails.licenseNumber : driverRow?.license_number || "",
     capacityKg: savedDetails?.capacityKg !== undefined ? savedDetails.capacityKg : 14000,
-    odometerKm: savedDetails?.odometerKm !== undefined ? savedDetails.odometerKm : 45200,
-    insuranceExpiry: savedDetails?.insuranceExpiry || "2027-04-30",
-    inspectionExpiry: savedDetails?.inspectionExpiry || "2027-01-15",
+    odometerKm: savedDetails?.odometerKm !== undefined ? savedDetails.odometerKm : 0,
+    insuranceExpiry: savedDetails?.insuranceExpiry || "",
+    inspectionExpiry: savedDetails?.inspectionExpiry || "",
     status: savedDetails?.status || "operational",
   };
 }
@@ -97,8 +103,11 @@ export async function saveVehicleDetails(details: {
   status?: string;
 }): Promise<any> {
   const cachedDriver = await appStorage.getJSON<Driver>(STORAGE_KEYS.driverProfile);
-  const driverId = cachedDriver?.id || "DRV-101";
-  const driverEmail = cachedDriver?.email || "tan.weiming@josanlogistics.com";
+  if (!cachedDriver?.id) {
+    throw new Error("No authenticated driver found.");
+  }
+  const driverId = cachedDriver.id;
+  const driverEmail = cachedDriver.email;
 
   try {
     const updatePayload: any = {
@@ -152,8 +161,11 @@ export async function saveVehicleDetails(details: {
 
 export async function deleteVehicleDetails(): Promise<void> {
   const cachedDriver = await appStorage.getJSON<Driver>(STORAGE_KEYS.driverProfile);
-  const driverId = cachedDriver?.id || "DRV-101";
-  const driverEmail = cachedDriver?.email || "tan.weiming@josanlogistics.com";
+  if (!cachedDriver?.id) {
+    return;
+  }
+  const driverId = cachedDriver.id;
+  const driverEmail = cachedDriver.email;
 
   try {
     const { error } = await supabase
@@ -202,12 +214,15 @@ export async function deleteVehicleDetails(): Promise<void> {
 
 export async function getSchedule(): Promise<any[]> {
   const cachedDriver = await appStorage.getJSON<Driver>(STORAGE_KEYS.driverProfile);
-  const driverId = cachedDriver?.id || "DRV-101";
+  if (!cachedDriver?.id) {
+    return [];
+  }
+  const driverId = cachedDriver.id;
 
   const { data: shipments } = await supabase
     .from("shipments")
     .select("*")
-    .or(`driver_id.eq.${driverId},driver_id.is.null`)
+    .eq("driver_id", driverId)
     .limit(5);
 
   return (shipments || []).map((s) => ({
@@ -222,7 +237,16 @@ export async function getSchedule(): Promise<any[]> {
 
 export async function getPerformance(): Promise<DriverPerformance> {
   const cachedDriver = await appStorage.getJSON<Driver>(STORAGE_KEYS.driverProfile);
-  const driverId = cachedDriver?.id || "DRV-101";
+  if (!cachedDriver?.id) {
+    return {
+      overallScore: 100,
+      rating: 5.0,
+      onTimeDeliveryPct: 100,
+      successfulDeliveryPct: 100,
+      safetyScorePct: 100,
+    };
+  }
+  const driverId = cachedDriver.id;
 
   const { data: driverRow } = await supabase.from("drivers").select("*").eq("id", driverId).maybeSingle();
 
@@ -265,8 +289,11 @@ export async function getDocuments(): Promise<DriverDocument[]> {
 
 export async function updateProfile(partialDriver: Partial<Driver>): Promise<Driver> {
   const cachedDriver = await appStorage.getJSON<Driver>(STORAGE_KEYS.driverProfile);
-  const driverId = cachedDriver?.id || "DRV-101";
-  const driverEmail = cachedDriver?.email || "tan.weiming@josanlogistics.com";
+  if (!cachedDriver?.id) {
+    throw new Error("No authenticated driver found.");
+  }
+  const driverId = cachedDriver.id;
+  const driverEmail = cachedDriver.email;
 
   let resolvedAvatarUrl = partialDriver.avatarUrl;
   if (resolvedAvatarUrl && !resolvedAvatarUrl.startsWith("http")) {

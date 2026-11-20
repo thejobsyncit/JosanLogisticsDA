@@ -25,7 +25,8 @@ export class ApiRequestError extends Error {
 }
 
 export interface LoginRequest {
-  employeeIdOrPhone: string;
+  email?: string;
+  employeeIdOrPhone?: string;
   password: string;
 }
 

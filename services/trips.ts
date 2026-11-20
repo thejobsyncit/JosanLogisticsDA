@@ -9,7 +9,7 @@ import type { Driver } from "@/types/driver";
 /** Helper to get current authenticated driver ID */
 async function getCurrentDriverId(): Promise<string> {
   const cached = await appStorage.getJSON<Driver>(STORAGE_KEYS.driverProfile);
-  return cached?.id || "DRV-101";
+  return cached?.id || "";
 }
 
 export async function getDashboardSummary(): Promise<DashboardSummary> {
@@ -20,18 +20,14 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     .select("*")
     .eq("driver_id", driverId);
 
-  if (error || !rows || rows.length === 0) {
-    // Fallback search without driver filter if seed driver has no shipments assigned
-    const { data: allRows } = await supabase.from("shipments").select("*").limit(10);
-    const trips = (allRows || []).map(mapDbShipmentToTrip);
-    const activeTrip = trips.find((t) => t.status !== TripStatus.DeliveryCompleted && t.status !== TripStatus.Cancelled) || null;
+  if (!driverId || error || !rows || rows.length === 0) {
     return {
-      activeTrip,
-      todayTrips: trips.filter((t) => t.status !== TripStatus.DeliveryCompleted),
-      pendingPickups: trips.filter((t) => t.status === TripStatus.Assigned || t.status === TripStatus.Accepted).length,
-      pendingDeliveries: trips.filter((t) => t.status === TripStatus.InTransit || t.status === TripStatus.ArrivedAtDelivery).length,
-      completedDeliveries: trips.filter((t) => t.status === TripStatus.DeliveryCompleted).length,
-      distanceTodayKm: 126,
+      activeTrip: null,
+      todayTrips: [],
+      pendingPickups: 0,
+      pendingDeliveries: 0,
+      completedDeliveries: 0,
+      distanceTodayKm: 0,
     };
   }
 
@@ -61,15 +57,12 @@ export async function getTrips(filter: TripListFilter): Promise<Trip[]> {
 
   let query = supabase.from("shipments").select("*");
 
+  if (!driverId) return [];
+
   // Query driver's shipments
   const { data: rows } = await query.eq("driver_id", driverId);
 
-  let shipments = rows || [];
-  if (shipments.length === 0) {
-    // If no shipments assigned to this exact driverId, fetch all active shipments for demo/testing
-    const { data: fallbackRows } = await supabase.from("shipments").select("*");
-    shipments = fallbackRows || [];
-  }
+  const shipments = rows || [];
 
   const trips = shipments.map(mapDbShipmentToTrip);
 
@@ -99,7 +92,10 @@ export async function getTripById(id: string): Promise<Trip> {
 
 export async function acceptTrip(id: string): Promise<Trip> {
   const cachedDriver = await appStorage.getJSON<Driver>(STORAGE_KEYS.driverProfile);
-  const driverId = cachedDriver?.id || "DRV-101";
+  if (!cachedDriver?.id) {
+    throw new Error("No authenticated driver found.");
+  }
+  const driverId = cachedDriver.id;
 
   const updateFields: Record<string, any> = {
     status: TripStatus.Accepted,

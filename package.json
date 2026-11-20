@@ -9,6 +9,7 @@
     "web": "expo start --web",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
+    "test": "node --test tests/auth.test.js tests/loginError.test.js tests/splashAndLoader.test.js tests/loginSecurity.test.js",
     "prebuild": "expo prebuild",
     "build:android": "eas build --platform android --profile preview"
   },

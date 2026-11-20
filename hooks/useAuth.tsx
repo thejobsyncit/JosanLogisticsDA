@@ -6,6 +6,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import * as authService from "@services/auth";
 import * as driverService from "@services/driver";
+import { supabase } from "@services/supabase";
 import type { Driver } from "@/types/driver";
 import type { LoginRequest, VerifyOtpRequest } from "@/types/api";
 
@@ -41,29 +42,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const restored = await authService.restoreSession();
         if (!active) return;
-        setToken(restored.token);
-        setDriver(restored.driver);
-        setIsBootstrapping(false);
 
-        if (restored.token) {
+        // Check active Supabase Auth session or restored token
+        const { data: { session: sbSession } } = await supabase.auth.getSession();
+        const activeToken = restored.token || sbSession?.access_token || null;
+
+        if (activeToken) {
           try {
+            // Strict verification on startup: confirms driver exists in public.drivers and is active
             const freshDriver = await authService.fetchCurrentDriver();
-            if (active) setDriver(freshDriver);
+            if (active) {
+              setToken(activeToken);
+              setDriver(freshDriver);
+            }
           } catch (err) {
-            console.warn("Failed to fetch fresh driver profile on boot:", err);
+            console.warn("Driver verification failed on boot. Signing out:", err);
+            await authService.logout();
+            if (active) {
+              setToken(null);
+              setDriver(null);
+            }
+          }
+        } else {
+          if (active) {
+            setToken(null);
+            setDriver(null);
           }
         }
       } catch (err) {
         console.warn("Failed to restore session on boot:", err);
+        if (active) {
+          setToken(null);
+          setDriver(null);
+        }
       } finally {
         clearTimeout(timeout);
         if (active) setIsBootstrapping(false);
       }
     })();
 
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_OUT" || !session) {
+        if (active) {
+          setToken(null);
+          setDriver(null);
+        }
+      }
+    });
+
     return () => {
       active = false;
       clearTimeout(timeout);
+      subscription.unsubscribe();
     };
   }, []);
 

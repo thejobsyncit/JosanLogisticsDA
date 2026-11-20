@@ -17,9 +17,9 @@ const AuthContext = createContext<AuthContextType>({
   driver: null,
   token: null,
   isLoading: true,
-  login: async () => {},
-  logout: async () => {},
-  updateStatus: async () => {},
+  login: async () => { },
+  logout: async () => { },
+  updateStatus: async () => { },
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -74,8 +74,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       const res = await authService.login({
-        employeeIdOrPhone: identifier,
-        password: password || "driver123",
+        email: identifier,
+        password: password || "",
       });
       if (res.token) {
         setToken(res.token);

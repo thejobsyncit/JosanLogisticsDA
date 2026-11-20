@@ -1,79 +1,73 @@
-import React, { useEffect } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Animated, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { colors, spacing, typography } from "@constants/theme";
+import { colors } from "@constants/theme";
 import { useAuth } from "@/hooks/useAuth";
+import { AnimatedSplashScreen } from "@/components/AnimatedSplashScreen";
 import LoginScreen from "./(auth)/login";
 import DashboardScreen from "./(tabs)/dashboard";
 
 /**
- * Branded splash screen component with direct fallback rendering so the root
- * screen never renders null while navigation transitions.
+ * Root Splash Screen Route.
+ * Coordinates the premium logistics-themed motorcycle introduction animation
+ * with the background session verification flow.
  */
 export default function SplashScreenRoute() {
   const { isAuthenticated, isBootstrapping } = useAuth();
   const router = useRouter();
 
+  const [animationReady, setAnimationReady] = useState(false);
+  const [transitioned, setTransitioned] = useState(false);
+  const fadeOutAnim = useRef(new Animated.Value(1)).current;
+
+  // Hide Expo's static native splash immediately so our interactive animation takes over
   useEffect(() => {
     try {
       SplashScreen.hide();
     } catch { }
     SplashScreen.hideAsync().catch(() => { });
+  }, []);
 
-    if (isBootstrapping) return;
-    try {
-      if (isAuthenticated) {
-        router.replace("/(tabs)/dashboard");
-      } else {
-        router.replace("/(auth)/login");
+  // When intro animation is complete AND session bootstrapping has finished, navigate smoothly
+  useEffect(() => {
+    if (!animationReady || isBootstrapping || transitioned) return;
+
+    setTransitioned(true);
+
+    // Smooth fade out into destination screen
+    Animated.timing(fadeOutAnim, {
+      toValue: 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      try {
+        if (isAuthenticated) {
+          router.replace("/(tabs)/dashboard");
+        } else {
+          router.replace("/(auth)/login");
+        }
+      } catch (err) {
+        console.warn("Splash navigation redirect warning:", err);
       }
-    } catch (err) {
-      console.warn("Splash redirect warning:", err);
-    }
-  }, [isAuthenticated, isBootstrapping, router]);
+    });
+  }, [animationReady, isBootstrapping, isAuthenticated, router, fadeOutAnim, transitioned]);
 
-  if (!isBootstrapping) {
+  // Fallback rendering once transitioned
+  if (transitioned) {
     return isAuthenticated ? <DashboardScreen /> : <LoginScreen />;
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.markWrap}>
-        <MaterialCommunityIcons name="truck-fast" size={44} color={colors.white} />
-      </View>
-      <Text style={styles.title}>JOSAN LOGISTICS</Text>
-      <Text style={styles.tagline}>Moving Business Forward</Text>
-    </View>
+    <Animated.View style={[styles.container, { opacity: fadeOutAnim }]}>
+      <AnimatedSplashScreen onAnimationReady={() => setAnimationReady(true)} />
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.navy,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-  },
-  markWrap: {
-    width: 88,
-    height: 88,
-    borderRadius: 24,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing.md,
-  },
-  title: {
-    fontSize: typography.h2.fontSize,
-    fontWeight: typography.h2.fontWeight,
-    color: colors.white,
-    letterSpacing: 1.5,
-  },
-  tagline: {
-    fontSize: typography.bodySmall.fontSize,
-    color: "rgba(255,255,255,0.7)",
+    backgroundColor: colors.background, // Warm off-white #FAF8F3
   },
 });

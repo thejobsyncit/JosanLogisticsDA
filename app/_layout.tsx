@@ -41,12 +41,15 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     SplashScreen.hideAsync().catch(() => { });
     if (isBootstrapping) return;
 
+    // Allow root splash route (app/index.tsx) to coordinate its intro sequence
+    if (!segments[0]) return;
+
     const inAuthGroup = segments[0] === "(auth)";
 
     try {
       if (!isAuthenticated && !inAuthGroup) {
         router.replace("/(auth)/login");
-      } else if (isAuthenticated && (inAuthGroup || !segments[0])) {
+      } else if (isAuthenticated && inAuthGroup) {
         router.replace("/(tabs)/dashboard");
       }
     } catch (err) {
